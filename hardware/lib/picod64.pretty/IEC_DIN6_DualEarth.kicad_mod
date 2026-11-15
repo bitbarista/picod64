@@ -1,0 +1,287 @@
+(footprint "IEC_DIN6_DualEarth"
+	(version 20241229)
+	(generator "picod64_gen")
+	(generator_version "9.0")
+	(layer "F.Cu")
+	(descr "IEC bus socket: 6-pin 240 deg DIN, right angle. Fits generic (earth +/-5), Lumberg 0105 06 and Same Sky SDF-60J (earth +/-2.5) via slotted earth pads. PicoD64 HARDWARE.md")
+	(tags "DIN-6 IEC C64 serial 240")
+	(property "Reference" "REF**"
+		(at 0 -7.9 0)
+		(layer "F.SilkS")
+		(uuid "8ad8ba3a-f071-57e4-9d6d-4508aa7bded9")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "IEC_DIN6_DualEarth"
+		(at 0 14.0 0)
+		(layer "F.Fab")
+		(uuid "24f85278-3378-5b0d-9cad-3fa674b09a1e")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Footprint" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "3dfe9ac3-1a43-51ad-b7e9-3d7ace6e0e91")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "7d83625f-00c0-5d6e-9792-2cb452b8fd43")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "abefee15-abff-5e07-9c4f-ef988656fa10")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr through_hole)
+	(fp_line
+		(start -10.7 -6.4)
+		(end 10.7 -6.4)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "ccedce79-4525-556f-a56b-50331d7974a2")
+	)
+	(fp_line
+		(start 10.7 -6.4)
+		(end 10.7 12.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "45dac151-ab22-51c6-b3e2-608c3a5d204d")
+	)
+	(fp_line
+		(start 10.7 12.5)
+		(end -10.7 12.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "a095b5bc-833c-5589-8f13-daad03c110fa")
+	)
+	(fp_line
+		(start -10.7 12.5)
+		(end -10.7 -6.4)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "c3d8f833-cb1c-5cdf-a2e0-67d7b115aafc")
+	)
+	(fp_line
+		(start -11.0 -6.7)
+		(end 11.0 -6.7)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "e0314e3e-1267-5fc2-a784-ce44098129c6")
+	)
+	(fp_line
+		(start 11.0 -6.7)
+		(end 11.0 12.8)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "af24b0c2-608b-5d9e-8890-d75fcbf96495")
+	)
+	(fp_line
+		(start 11.0 12.8)
+		(end -11.0 12.8)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "4cbb55c2-71ad-5579-89b8-cee4e46e3c6f")
+	)
+	(fp_line
+		(start -11.0 12.8)
+		(end -11.0 -6.7)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "d120e83f-f9f1-5541-a5e9-e03e50111af4")
+	)
+	(fp_line
+		(start -10.8 12.5)
+		(end 10.8 12.5)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "25c66f0e-bdf5-5dcc-a6b3-2f1300025d90")
+	)
+	(fp_line
+		(start -10.8 -6.5)
+		(end 10.8 -6.5)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "8ece40da-a3e2-5d90-8761-2e676f78c384")
+	)
+	(fp_line
+		(start 10.8 -6.5)
+		(end 10.8 -6.5)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "8c509fed-f0b8-594b-8bbd-96ba0e74bff0")
+	)
+	(fp_line
+		(start 10.8 -6.5)
+		(end -10.8 -6.5)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "f738838e-2526-5643-bfe2-da1a10ba5b11")
+	)
+	(fp_line
+		(start -10.8 -6.5)
+		(end -10.8 -6.5)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "cf2353df-9b05-5c0e-8220-54d0e44ea2a2")
+	)
+	(pad "5" thru_hole circle
+		(at -7.5 0)
+		(size 2.4 2.4)
+		(drill 1.5)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "ccea2dff-fc14-5ce4-b9ad-356fc44765ae")
+	)
+	(pad "3" thru_hole circle
+		(at 0 0)
+		(size 2.4 2.4)
+		(drill 1.5)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "9cec43bf-b27b-582d-8359-cb9f1c46cc17")
+	)
+	(pad "1" thru_hole circle
+		(at 7.5 0)
+		(size 2.4 2.4)
+		(drill 1.5)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "3c7d25a0-cfca-54a2-8080-8209847e0d98")
+	)
+	(pad "4" thru_hole circle
+		(at -5 -2.5)
+		(size 2.4 2.4)
+		(drill 1.5)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "3deeea7b-59b4-53b6-861a-4be152b95292")
+	)
+	(pad "2" thru_hole circle
+		(at 5 -2.5)
+		(size 2.4 2.4)
+		(drill 1.5)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "d92a33af-31b6-539a-b16f-e1f795e78981")
+	)
+	(pad "6" thru_hole circle
+		(at 0 -5)
+		(size 2.4 2.4)
+		(drill 1.5)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "3a2a1d1a-7238-59f4-a19a-b5faef23073f")
+	)
+	(pad "7" thru_hole oval
+		(at -3.75 10)
+		(size 4.9 2.4)
+		(drill oval 4.0 1.5)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "4c403764-4ba1-534b-b332-7a5bd8d831d7")
+	)
+	(pad "7" thru_hole oval
+		(at 3.75 10)
+		(size 4.9 2.4)
+		(drill oval 4.0 1.5)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "56ff558b-6407-5335-89cc-55fc5d350a87")
+	)
+	(pad "" np_thru_hole circle
+		(at -7.5 5)
+		(size 2.4 2.4)
+		(drill 2.4)
+		(layers "*.Cu" "*.Mask")
+		(uuid "72477b20-40be-5836-ac13-12aaa9603eeb")
+	)
+	(pad "" np_thru_hole circle
+		(at 7.5 5)
+		(size 2.4 2.4)
+		(drill 2.4)
+		(layers "*.Cu" "*.Mask")
+		(uuid "7e4d142e-dc8e-5de2-a7ca-e32f67467964")
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/lib/3d/Lumberg_0105_06.igs"
+		(offset
+			(xyz 0 -11.21 19.455)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 180 0 0)
+		)
+	)
+)

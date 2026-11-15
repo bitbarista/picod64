@@ -1,0 +1,42 @@
+# build outputs
+bench/build/
+fw/build/
+__pycache__/
+# host test binaries (built by host/run.sh, host/check.sh)
+host/cpu_test
+host/d64make_test
+host/dos_boot
+host/drive_test
+host/equiv_laf
+host/equiv_eag
+host/equiv_new
+host/equiv_ref
+host/f4b
+host/f4b_ref
+host/f4c
+host/f4c_ref
+host/f6
+host/maps_test
+# KiCad per-user and cache files, local backups
+hardware/*.kicad_prl
+hardware/fp-info-cache
+hardware/*-backups/
+*.lck
+# ⚠ third-party documents: held for reference, not ours to redistribute
+# (the folder, recursively; PROVENANCE.md lists every source with its URL so it can be re-fetched)
+datasheets/**
+!datasheets/**/
+!datasheets/**/*.md
+# ROM images are Commodore's: never commit (the SD card holds the user's own dos1541.bin)
+*.rom
+dos1541*.bin
+# makers' 3D models: not redistributable (THIRD-PARTY.md); fetched by hardware/lib/3d/fetch.sh
+hardware/lib/3d/*
+!hardware/lib/3d/fetch.sh
+!hardware/lib/3d/README.md
+# assembled from fw/browser/browser.asm (browser_prg.h is committed)
+fw/browser/browser.prg
+fw/browser/boot.prg
+
+# a local file; never committed
+case/3MF/case_top_bottom_and_knob.3mf

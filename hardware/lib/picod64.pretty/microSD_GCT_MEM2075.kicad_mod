@@ -1,0 +1,333 @@
+(footprint "microSD_GCT_MEM2075"
+	(version 20241229)
+	(generator "picod64_gen")
+	(generator_version "9.0")
+	(layer "F.Cu")
+	(descr "microSD push-push, GCT MEM2075-00-140-01-A: every tail outside the body (hand soldering). PicoD64 HARDWARE.md")
+	(tags "microSD TF push-push card detect")
+	(property "Reference" "REF**"
+		(at 0 -9.85 0)
+		(layer "F.SilkS")
+		(uuid "e7842e45-9691-54af-9f9c-8c9bdb34b307")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "microSD_GCT_MEM2075"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(uuid "7df03fa9-9a49-52e1-a87d-0b6fe46ae97f")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Footprint" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "a7c92b40-d4a7-5c8c-aebb-b5eb683b914e")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "5da33c0b-d996-5736-8578-d25299041f91")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "8c4c0378-8b15-5a74-be1e-34a56bf87644")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd)
+	(fp_line
+		(start -7.525 -7.25)
+		(end 7.525 -7.25)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "9644a8ea-2351-5ec7-87a3-731aa884c385")
+	)
+	(fp_line
+		(start 7.525 -7.25)
+		(end 7.525 7.25)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "474ed38e-4bc0-5072-9684-a81dca16643c")
+	)
+	(fp_line
+		(start 7.525 7.25)
+		(end -7.525 7.25)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "95a20711-4b79-5475-92c6-e34131a1e787")
+	)
+	(fp_line
+		(start -7.525 7.25)
+		(end -7.525 -7.25)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "48383bd6-d40d-51cb-9fec-005108a292b7")
+	)
+	(fp_line
+		(start -8.9 -9.1)
+		(end 8.9 -9.1)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "db22d7fc-ceb5-5960-816e-962efd9be192")
+	)
+	(fp_line
+		(start 8.9 -9.1)
+		(end 8.9 7.5)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "d2368c76-43fc-5769-b8e9-85653080df50")
+	)
+	(fp_line
+		(start 8.9 7.5)
+		(end -8.9 7.5)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "02a03a32-9fd1-5cd2-aa74-76d2eac8faf6")
+	)
+	(fp_line
+		(start -8.9 7.5)
+		(end -8.9 -9.1)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "ce6ddc51-6959-56fc-9611-6add485721e5")
+	)
+	(fp_line
+		(start -7.675000000000001 -4.75)
+		(end -7.675000000000001 1.45)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "96337aac-961a-5c76-bccf-45e510d1b11a")
+	)
+	(fp_line
+		(start 7.675000000000001 -4.75)
+		(end 7.675000000000001 1.45)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "b3f951bc-5319-5630-b8f9-d54db0fbffb8")
+	)
+	(fp_line
+		(start -7.675000000000001 4.25)
+		(end -7.675000000000001 6.65)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "1805b136-401a-56f2-8899-3e0146557a34")
+	)
+	(fp_line
+		(start 7.675000000000001 4.25)
+		(end 7.675000000000001 6.65)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "515eb43b-aeb6-5f33-9424-7c9e0f2de8ad")
+	)
+	(pad "9" smd rect
+		(at -6.695 -8.15)
+		(size 0.62 1.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "8c0426ca-0666-56ee-8e89-3ecb679fe59b")
+	)
+	(pad "1" smd rect
+		(at 2.105 -8.15)
+		(size 0.62 1.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "2326d8d5-9cf9-55eb-825c-7c2c5d3b5194")
+	)
+	(pad "2" smd rect
+		(at 1.005 -8.15)
+		(size 0.62 1.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "532baaf5-5374-5c86-9aee-be226efcab63")
+	)
+	(pad "3" smd rect
+		(at -0.095 -8.15)
+		(size 0.62 1.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "2fa73f72-af63-5de5-b901-62639866b872")
+	)
+	(pad "4" smd rect
+		(at -1.195 -8.15)
+		(size 0.62 1.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "859ca376-949a-5cbc-8c7c-2bd6fed37135")
+	)
+	(pad "5" smd rect
+		(at -2.295 -8.15)
+		(size 0.62 1.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "bf0d5f81-b0ae-5064-9983-ad82815dbbc6")
+	)
+	(pad "6" smd rect
+		(at -3.395 -8.15)
+		(size 0.62 1.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "fcbacb1a-a90e-54a8-8de9-6811aede0b1a")
+	)
+	(pad "7" smd rect
+		(at -4.495 -8.15)
+		(size 0.62 1.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "0629b848-1579-5281-a6ec-c9af7e1f19d1")
+	)
+	(pad "8" smd rect
+		(at -5.595 -8.15)
+		(size 0.62 1.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "73738985-11cd-5a20-9797-6de9404cacfc")
+	)
+	(fp_line
+		(start 2.105 -9.15)
+		(end 2.105 -9.65)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "87c2dce4-0755-5736-b284-508c05f5b060")
+	)
+	(pad "10" smd rect
+		(at -8.075 -6.15)
+		(size 1.1 2.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "7f78f4b7-90dd-53fb-b07c-7c3aa144336b")
+	)
+	(pad "10" smd rect
+		(at -8.075 2.85)
+		(size 1.1 2.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "63dbe73e-8cc5-5a8a-805b-8ef7d67eac3d")
+	)
+	(pad "10" smd rect
+		(at 8.075 -6.15)
+		(size 1.1 2.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "c7f50161-46ec-5705-81c2-e3d5b2a1da77")
+	)
+	(pad "10" smd rect
+		(at 8.075 2.85)
+		(size 1.1 2.4)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "7c9f56a3-8b75-5fa9-a93c-1ee4fbab032c")
+	)
+	(pad "" np_thru_hole circle
+		(at 2.915 3.27)
+		(size 0.95 0.95)
+		(drill 0.95)
+		(layers "*.Cu" "*.Mask")
+		(uuid "2628e2e2-d4b7-58e0-8230-8a0532d1ea93")
+	)
+	(pad "" np_thru_hole circle
+		(at -3.885 3.27)
+		(size 0.95 0.95)
+		(drill 0.95)
+		(layers "*.Cu" "*.Mask")
+		(uuid "a57cba8c-d000-55c7-8cee-cd0e31efbb33")
+	)
+	(zone
+		(net 0)
+		(net_name "")
+		(layer "F.Cu")
+		(uuid "14854389-84de-53a3-b8c8-ba310d0ebd42")
+		(hatch edge 0.5)
+		(connect_pads
+			(clearance 0)
+		)
+		(min_thickness 0.25)
+		(filled_areas_thickness no)
+		(keepout
+			(tracks not_allowed)
+			(vias not_allowed)
+			(pads not_allowed)
+			(copperpour not_allowed)
+			(footprints allowed)
+		)
+		(placement
+			(enabled no)
+			(sheetname "")
+		)
+		(fill
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+		)
+		(polygon
+			(pts
+				(xy -7.525 -4.65) (xy 2.675 -4.65) (xy 2.675 -0.6) (xy -7.525 -0.6)
+			)
+		)
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/lib/3d/GCT_MEM2075-00-140-01-A.step"
+		(offset
+			(xyz -0.48 -3.27 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz -90 0 0)
+		)
+	)
+)

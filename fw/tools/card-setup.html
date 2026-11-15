@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PicoD64 card setup</title>
+<!--
+  PicoD64 card setup: the ROM files PicoD64 needs on its SD card, made in the browser. Nothing is installed and no
+  ROM is held here: the page fetches Commodore's ROMs from the zimmers.net archive (it allows that from any page), or
+  takes files you already have, checks them against the ROM PicoD64 is tested with, and saves them for the card.
+  The same as fw/tools/get-roms.sh and get-roms.ps1, for people who'd rather click than type.
+  GPL-3.0-only, part of PicoD64. MD5 below: RFC 1321's algorithm, written here (the browser's crypto has no MD5).
+-->
+<style>
+  :root {
+    --bg: #f4f3ef; --panel: #ffffff; --ink: #1d1d22; --soft: #5b5b66; --line: #d9d7d0;
+    --accent: #4a3aff; --accent-ink: #ffffff; --ok: #1f7a3a; --warn: #9a5b00; --bad: #b3261e;
+    --okbg: #e6f4ea; --warnbg: #fff4e0; --badbg: #fde8e7; --drop: #eeedff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15151a; --panel: #1f1f26; --ink: #ecebf2; --soft: #a3a2ad; --line: #34343f;
+      --accent: #8b80ff; --accent-ink: #15151a; --ok: #6fd28d; --warn: #f0b45c; --bad: #ff8a80;
+      --okbg: #1c3325; --warnbg: #3a2c14; --badbg: #3d1d1b; --drop: #26244a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15151a; --panel: #1f1f26; --ink: #ecebf2; --soft: #a3a2ad; --line: #34343f;
+    --accent: #8b80ff; --accent-ink: #15151a; --ok: #6fd28d; --warn: #f0b45c; --bad: #ff8a80;
+    --okbg: #1c3325; --warnbg: #3a2c14; --badbg: #3d1d1b; --drop: #26244a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 1.15rem; margin: 0 0 6px; }
+  p { margin: 6px 0; }
+  .lead { color: var(--soft); margin-bottom: 24px; }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 16px; margin: 16px 0; }
+  .num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 0.9rem; margin-right: 8px; vertical-align: 1px; }
+  .opt { font-weight: 400; color: var(--soft); font-size: 0.95rem; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 16px; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  button.second { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); padding: 8.5px 14.5px; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  .drop { margin-top: 12px; border: 2px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--soft); font-size: 0.95rem; }
+  .drop.over { border-color: var(--accent); background: var(--drop); color: var(--ink); }
+  .drop label { color: var(--accent); text-decoration: underline; cursor: pointer; }
+  .drop input { display: none; }
+  .msgs { margin-top: 10px; display: grid; gap: 6px; }
+  .msg { border-radius: 8px; padding: 8px 12px; font-size: 0.95rem; }
+  .msg.ok { background: var(--okbg); color: var(--ok); }
+  .msg.warn { background: var(--warnbg); color: var(--warn); }
+  .msg.bad { background: var(--badbg); color: var(--bad); }
+  .msg.info { background: transparent; color: var(--soft); padding-left: 0; }
+  .files { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .files li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .files code, code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.92em; }
+  .files .state { color: var(--soft); white-space: nowrap; }
+  .files .ready { color: var(--ok); font-weight: 600; }
+  details { margin-top: 10px; color: var(--soft); font-size: 0.95rem; }
+  summary { cursor: pointer; }
+  footer { color: var(--soft); font-size: 0.88rem; margin-top: 28px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>PicoD64 card setup</h1>
+  <p class="lead">PicoD64 runs the 1541's own operating system, so it needs a copy of the drive's ROM on its SD card.
+  The ROM is Commodore's copyright, so it can't come with PicoD64: this page fetches it for you from the
+  <a href="https://www.zimmers.net/anonftp/pub/cbm/firmware/" target="_blank" rel="noopener">zimmers.net</a> archive,
+  or uses a copy you already have, checks it, and saves it for the card. Nothing to install.</p>
+
+  <section class="step">
+    <h2><span class="num">1</span>The 1541 ROM</h2>
+    <p>Get it from the archive. It comes in two halves; they are joined and checked here.</p>
+    <div class="row">
+      <button id="getDos">Get the 1541 ROM</button>
+    </div>
+    <div class="drop" id="dropDos">Or drop your own file(s) here: the 16 KB ROM, or its two 8 KB halves.
+      <label>Choose files<input type="file" id="pickDos" multiple></label></div>
+    <div class="msgs" id="msgDos"></div>
+  </section>
+
+  <section class="step">
+    <h2><span class="num">2</span>The Commodore font <span class="opt">(optional)</span></h2>
+    <p>The OLED comes with a C64-style font. For the C64's own letters instead (wider: 14 characters a line instead of
+    19), add the C64's character ROM.</p>
+    <div class="row">
+      <button id="getFont" class="second">Get the C64 character ROM</button>
+    </div>
+    <div class="drop" id="dropFont">Or drop your own copy here (4 KB).
+      <label>Choose a file<input type="file" id="pickFont"></label></div>
+    <div class="msgs" id="msgFont"></div>
+  </section>
+
+  <section class="step">
+    <h2><span class="num">3</span>Onto the card</h2>
+    <ul class="files" id="files"></ul>
+    <div class="row">
+      <button id="toCard" disabled>Save to the SD card…</button>
+      <button id="download" class="second" disabled>Download the files</button>
+    </div>
+    <div class="msgs" id="msgCard"></div>
+    <p class="msg info" id="cardHint">Put the card in this computer first. The files go in the card's top folder,
+    next to your folders of games: not inside one.</p>
+  </section>
+
+  <details>
+    <summary>What exactly does this do?</summary>
+    <p>It downloads <code>1541-c000.325302-01.bin</code> and <code>1541-e000.901229-05.bin</code> (8 KB each) from
+    zimmers.net, joins them into <code>dos1541.bin</code> (16,384 bytes) and checks its MD5 is
+    <code>a0ce8439d1b8dcf2e1430461f7233a72</code>, the ROM PicoD64 is tested with. The font is
+    <code>characters.901225-01.bin</code>, saved as <code>chargen.bin</code>. Everything happens in your browser;
+    nothing is sent anywhere.</p>
+    <p>Your own files are recognised by their contents, not their names. A 16 KB ROM that isn't the tested one
+    (a JiffyDOS 1541 ROM, or another version) is accepted with a warning: it may work, but it hasn't been tested.
+    JiffyDOS needs the JiffyDOS KERNAL in the C64 too.</p>
+    <p>The same, from a command line: <code>fw/tools/get-roms.sh</code> (Linux, macOS) or
+    <code>get-roms.ps1</code> (Windows).</p>
+  </details>
+  <footer>PicoD64 · <a href="https://github.com/bitbarista/picod64" target="_blank" rel="noopener">github.com/bitbarista/picod64</a></footer>
+</main>
+
+<script>
+"use strict";
+const Z = "https://www.zimmers.net/anonftp/pub/cbm/firmware/";
+const KNOWN = {
+  "a0ce8439d1b8dcf2e1430461f7233a72": { kind: "dos", what: "the 1541 ROM (325302-01 + 901229-05), the one PicoD64 is tested with" },
+  "41f5af978d69fc20f1f2fcad7c2ad8cf": { kind: "lo", what: "the 1541 ROM's first half (325302-01, $C000)" },
+  "ea93aaa7016a673aac2294cbb08a9885": { kind: "hi", what: "the 1541 ROM's second half (901229-05, $E000)" },
+  "12a4202f5331d45af846af6c58fba946": { kind: "font", what: "the C64 character ROM (901225-01)" },
+};
+const DOS_MD5 = "a0ce8439d1b8dcf2e1430461f7233a72";
+const out = { "dos1541.bin": null, "chargen.bin": null };
+let lo = null, hi = null;
+
+/* --- MD5 (RFC 1321) --- */
+function md5(bytes) {
+  const K = new Uint32Array(64), S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+  for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) >>> 0;
+  const n = bytes.length, len = ((n + 8) >>> 6 << 6) + 64, m = new Uint8Array(len);
+  m.set(bytes); m[n] = 0x80;
+  const bits = n * 8; for (let i = 0; i < 8; i++) m[len - 8 + i] = Math.floor(bits / 2 ** (8 * i)) & 255;
+  let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+  const w = new Uint32Array(16);
+  for (let o = 0; o < len; o += 64) {
+    for (let i = 0; i < 16; i++) w[i] = m[o + 4 * i] | m[o + 4 * i + 1] << 8 | m[o + 4 * i + 2] << 16 | m[o + 4 * i + 3] << 24;
+    let a = a0, b = b0, c = c0, d = d0;
+    for (let i = 0; i < 64; i++) {
+      let f, g;
+      if (i < 16) { f = (b & c) | (~b & d); g = i; }
+      else if (i < 32) { f = (d & b) | (~d & c); g = (5 * i + 1) % 16; }
+      else if (i < 48) { f = b ^ c ^ d; g = (3 * i + 5) % 16; }
+      else { f = c ^ (b | ~d); g = (7 * i) % 16; }
+      const t = d; d = c; c = b;
+      const x = (a + f + K[i] + w[g]) >>> 0, s = S[(i >> 4) * 4 + (i & 3)];
+      b = (b + ((x << s) | (x >>> (32 - s)))) >>> 0; a = t;
+    }
+    a0 = (a0 + a) >>> 0; b0 = (b0 + b) >>> 0; c0 = (c0 + c) >>> 0; d0 = (d0 + d) >>> 0;
+  }
+  return [a0, b0, c0, d0].map(v => [0, 8, 16, 24].map(s => ((v >>> s) & 255).toString(16).padStart(2, "0")).join("")).join("");
+}
+
+/* --- messages --- */
+function say(box, cls, text) { const d = document.createElement("div"); d.className = "msg " + cls; d.textContent = text; document.getElementById(box).appendChild(d); }
+function clear(box) { document.getElementById(box).replaceChildren(); }
+
+/* --- what a file is, by its contents --- */
+function take(bytes, name, box) {
+  const h = md5(bytes), k = KNOWN[h];
+  if (k && k.kind === "dos") { out["dos1541.bin"] = bytes; say(box, "ok", `${name}: ${k.what}. Ready.`); }
+  else if (k && k.kind === "lo") { lo = bytes; say(box, "ok", `${name}: ${k.what}.`); }
+  else if (k && k.kind === "hi") { hi = bytes; say(box, "ok", `${name}: ${k.what}.`); }
+  else if (k && k.kind === "font") { out["chargen.bin"] = bytes; say(box, "ok", `${name}: ${k.what}. Ready.`); }
+  else if (bytes.length === 16384 && box === "msgDos") {
+    out["dos1541.bin"] = bytes;
+    say(box, "warn", `${name}: a 16 KB ROM, but not the one PicoD64 is tested with (MD5 ${h}). Perhaps JiffyDOS or another 1541 version: it may work, but hasn't been tested. Used as dos1541.bin.`);
+  } else if (bytes.length === 4096 && box === "msgFont") {
+    out["chargen.bin"] = bytes;
+    say(box, "warn", `${name}: a 4 KB file, but not the stock C64 character ROM (MD5 ${h}). Used as chargen.bin anyway: if the OLED looks wrong, take it off the card.`);
+  } else if (bytes.length === 8192) {
+    say(box, "bad", `${name}: 8 KB, but not either half of the 1541 ROM (MD5 ${h}). Not used.`);
+  } else {
+    const want = box === "msgDos" ? "16,384 bytes, or two halves of 8,192" : "4,096 bytes";
+    say(box, "bad", `${name}: ${bytes.length.toLocaleString()} bytes, not a ROM this needs (${want}). Not used.`);
+  }
+  refresh();
+}
+/* after a batch of files: two halves make the ROM; one alone asks for the other */
+function halves(box) {
+  if (lo && hi && !out["dos1541.bin"]) {
+    const j = new Uint8Array(16384); j.set(lo, 0); j.set(hi, 8192);
+    if (md5(j) === DOS_MD5) { out["dos1541.bin"] = j; say(box, "ok", "The two halves joined: dos1541.bin, checked. Ready."); }
+    else say(box, "bad", "The two halves don't make the expected ROM when joined.");
+  } else if ((lo || hi) && !out["dos1541.bin"]) {
+    say(box, "info", `Now the ${lo ? "second" : "first"} half, please: drop it here too.`);
+  }
+  refresh();
+}
+
+/* --- fetching from the archive --- */
+async function fetchBytes(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return new Uint8Array(await r.arrayBuffer());
+}
+document.getElementById("getDos").onclick = async (e) => {
+  const b = e.currentTarget; b.disabled = true; clear("msgDos"); say("msgDos", "info", "Fetching the two halves from zimmers.net…");
+  try {
+    const a = await fetchBytes(Z + "drives/new/1541/1541-c000.325302-01.bin");
+    const c = await fetchBytes(Z + "drives/new/1541/1541-e000.901229-05.bin");
+    clear("msgDos"); lo = hi = null; out["dos1541.bin"] = null;
+    take(a, "1541-c000.325302-01.bin", "msgDos"); take(c, "1541-e000.901229-05.bin", "msgDos"); halves("msgDos");
+  } catch (err) {
+    clear("msgDos");
+    say("msgDos", "bad", `Couldn't fetch it (${err.message}). Check the internet connection and try again, or download the two files yourself from zimmers.net and drop them below.`);
+  }
+  b.disabled = false;
+};
+document.getElementById("getFont").onclick = async (e) => {
+  const b = e.currentTarget; b.disabled = true; clear("msgFont"); say("msgFont", "info", "Fetching from zimmers.net…");
+  try {
+    const f = await fetchBytes(Z + "computers/c64/characters.901225-01.bin");
+    clear("msgFont"); take(f, "characters.901225-01.bin", "msgFont");
+  } catch (err) {
+    clear("msgFont"); say("msgFont", "bad", `Couldn't fetch it (${err.message}). Check the internet connection and try again.`);
+  }
+  b.disabled = false;
+};
+
+/* --- your own files --- */
+function hookDrop(zone, input, box, multi) {
+  const z = document.getElementById(zone), i = document.getElementById(input);
+  const read = async (list) => {
+    clear(box); if (box === "msgDos") out["dos1541.bin"] = null; else out["chargen.bin"] = null;   /* (a half dropped earlier is kept for its partner) */
+    for (const f of Array.from(list).slice(0, multi ? 4 : 1)) take(new Uint8Array(await f.arrayBuffer()), f.name, box);
+    if (box === "msgDos") halves(box);
+  };
+  z.addEventListener("dragover", (e) => { e.preventDefault(); z.classList.add("over"); });
+  z.addEventListener("dragleave", () => z.classList.remove("over"));
+  z.addEventListener("drop", (e) => { e.preventDefault(); z.classList.remove("over"); read(e.dataTransfer.files); });
+  i.addEventListener("change", () => { read(i.files); i.value = ""; });
+}
+hookDrop("dropDos", "pickDos", "msgDos", true);
+hookDrop("dropFont", "pickFont", "msgFont", false);
+
+/* --- onto the card --- */
+const canPick = "showDirectoryPicker" in window;
+function refresh() {
+  const ul = document.getElementById("files"); ul.replaceChildren();
+  for (const [name, need] of [["dos1541.bin", "needed"], ["chargen.bin", "optional"]]) {
+    const li = document.createElement("li"), c = document.createElement("code"), s = document.createElement("span");
+    c.textContent = name; s.className = "state" + (out[name] ? " ready" : "");
+    s.textContent = out[name] ? "ready" : need === "needed" ? "needed: step 1" : "optional: step 2";
+    li.append(c, s); ul.append(li);
+  }
+  const any = !!out["dos1541.bin"] || !!out["chargen.bin"];
+  document.getElementById("toCard").disabled = !any || !canPick;
+  document.getElementById("download").disabled = !any;
+}
+if (!canPick) {
+  document.getElementById("toCard").title = "This browser can't write to a folder: use Download, then copy the files to the card. (Chrome and Edge can.)";
+  document.getElementById("toCard").style.display = "none";
+}
+document.getElementById("toCard").onclick = async () => {
+  clear("msgCard");
+  try {
+    const dir = await window.showDirectoryPicker({ mode: "readwrite", id: "picod64-card" });
+    let n = 0;
+    for (const [name, bytes] of Object.entries(out)) {
+      if (!bytes) continue;
+      const fh = await dir.getFileHandle(name, { create: true }), w = await fh.createWritable();
+      await w.write(bytes); await w.close(); n++;
+      say("msgCard", "ok", `${name} written to "${dir.name}".`);
+    }
+    say("msgCard", "info", n ? "Done. Eject the card safely, put it in PicoD64 and power up." : "Nothing to write yet.");
+    if (n && !out["dos1541.bin"]) say("msgCard", "warn", "PicoD64 still needs dos1541.bin: step 1.");
+  } catch (err) {
+    if (err.name !== "AbortError") say("msgCard", "bad", `Couldn't write to the card (${err.message}). Use "Download the files" and copy them across instead.`);
+  }
+};
+document.getElementById("download").onclick = () => {
+  clear("msgCard");
+  for (const [name, bytes] of Object.entries(out)) {
+    if (!bytes) continue;
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+    a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  say("msgCard", "info", "Saved to your Downloads. Copy them to the top folder of the card (not inside another folder), keeping the names.");
+};
+refresh();
+</script>
+</body>
+</html>

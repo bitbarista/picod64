@@ -1,0 +1,36 @@
+; PicoD64 -- a bus sniffer for like-for-like tests (2026-11-07): on every ATN edge, the lines just BEFORE the edge
+; (what the drive held for the slot that ends there) and ~13 us after it (a fast loader's C64 reads 13.19 us after its
+; ATN write: FIRMWARE.md, The Hat), with a time stamp. It only reads the pins, so it can watch another drive (PicoD64's
+; bus off, serial X) or PicoD64's own.
+; "Before": a drive's ATN acknowledge gate moves DATA within ns of the edge, so a sample at the edge is a race (first
+; recording: a third of DATA samples differed between two good drives). Each loop iteration keeps the one before in
+; OSR: at the edge OSR holds lines sampled 0.4-0.7 us before it was seen, and after the previous look found no edge.
+; Clock 10 MHz (fw/pico_main.c). in_base = GP12 (ATN, CLK, DATA; 1 = released). JMP pin = ATN_IN.
+; X counts down once per loop (4 cycles, 0.4 us) while waiting: the time stamp; an edge's ~134 cycles aren't counted.
+; Each edge pushes one word: [31:29] the lines before the edge, [28:26] ~13 us after, [25:0] X.
+.program iec_sniff
+public wait_fall:                ; ATN released: wait for it to be pulled
+    mov osr, isr                 ; the previous look's lines
+    mov isr, pins                ; this look's
+    jmp pin wf_tick
+    jmp edge
+wf_tick:
+    jmp x-- wait_fall
+    jmp wait_fall
+wait_rise:                       ; ATN pulled: wait for its release
+    mov osr, isr
+    mov isr, pins
+    jmp pin edge
+    jmp x-- wait_rise
+    jmp wait_rise
+edge:
+    in osr, 3                    ; before the edge (ISR's other bits shift out: 32 are shifted in below)
+    nop [31]
+    nop [31]
+    nop [31]
+    nop [31]
+    in pins, 3                   ; 12.9-13.2 us after it
+    in x, 26
+    push noblock                 ; never stall: a full FIFO loses the edge (the DMA drains it at once)
+    jmp pin wait_fall
+    jmp wait_rise

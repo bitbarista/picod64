@@ -1,0 +1,41 @@
+Refs,Qty,Fit,Value,Description,Manufacturer,MPN,Farnell UK,Footprint,Notes
+A1,1,fit,Raspberry Pi Pico 2,"Raspberry Pi Pico 2 (RP2350), no headers; soldered flat on its castellations",Raspberry Pi,SC1631,4531086,RaspberryPi_Pico_SMD_HandSolder_Pin1Rect,
+BZ1,1,fit,PS1240P02BT,"Piezo transducer, external drive, Ø12.2 x 6.5 mm, 5.0 mm pitch",TDK,PS1240P02BT,3267212,Buzzer_TDK_PS1240P02BT_D12.2mm_H6.5mm,"drive sounds, always fitted (AUDIT R40); 12,019 in stock 2026-10-26. NOT a magnetic/self-drive buzzer"
+C1,1,fit,10uF,"Electrolytic 10 µF 50 V, 5 x 11 mm, 2.0 mm pitch",Multicomp Pro,MCGPR50V106M5X11,9451382,CP_Radial_D5.0mm_P2.00mm,+ to the square pad
+C2 C3,2,fit,100nF,"Ceramic 100 nF 50 V X7R, radial, 2.5 mm lead spacing",Vishay,K104K15X7RF53L2,1141775,C_Disc_D3.0mm_W2.0mm_P2.50mm,"suffix L2 = straight 2.5 mm [D: Vishay 45171]; 165,160 in stock 2026-10-26. NOT ...TH5 (5.0 mm)"
+C4 C5,2,fit,10nF,"Ceramic 10 nF 50 V X7R, radial, 2.5 mm lead spacing",Vishay,K103K15X7RF53L2,1141772,C_Disc_D3.0mm_W2.0mm_P2.50mm,"L2 = straight 2.5 mm; 35,115 in stock 2026-10-26. NOT ...TH5 (5.0 mm)"
+D1,1,fit,green,"LED 3 mm green diffused, 568 nm, 8-20 mcd @ 10 mA",Kingbright,L-934GD,1142502,LED_D3.0mm,same family as D2 (L-934); flat/short leg = square pad
+D2,1,fit,red,"LED 3 mm high-efficiency red diffused, 625 nm, 8-20 mcd @ 10 mA",Kingbright,L-934ID,1142517,LED_D3.0mm,same family as D1; R13 470R -> ~2.8 mA from GP21 (< 4 mA drive)
+D4,1,fit,1N5819,"Schottky 1N5819, DO-41",Vishay,1N5819-E3/54,1336533,D_DO-41_SOD81_P10.16mm_Horizontal,blocks the bus powering the Pico; band (K) toward RN3 pin 1
+J1 J2,2,fit,IEC_DIN6,"DIN 6-pin 240° socket, right angle, PCB",Lumberg,0105 06,2677786,IEC_DIN6_DualEarth,Same Sky SDF-60J also fits the footprint
+J3,1,fit,GCT MEM2075-00-140-01-A,"microSD socket, push-push, all tails exposed",GCT,MEM2075-00-140-01-A,2895610,microSD_GCT_MEM2075,"LCSC C3029735; the only SMD part (drag-solder, flux)"
+J4,1,fit,OLED 1.3in I2C,"Socket 1 x 4, 2.54 mm, 8.5 mm high",Würth,61300411821,2827888,PinSocket_1x04_P2.54mm_Vertical,"the OLED plugs in here, last"
+J5,1,fit,debug UART,"Pin header 1 x 3, 2.54 mm (debug UART)",Würth,61304011121 (cut),,PinHeader_1x03_P2.54mm_Vertical,3 pins cut from the 1 x 40 strip
+JP1 JP2,2,fit,OLED pin 1/OLED pin 2,"Pin header 1 x 3, 2.54 mm",Würth,61304011121 (cut),,PinHeader_1x03_P2.54mm_Vertical,3 pins cut from the 1 x 40 strip; each takes a jumper cap
+Q1 Q2,2,fit,2N3904,"NPN 2N3904, TO-92 (E-B-C)",onsemi,2N3904BU,1700648,TO-92_Inline_Wide,bend the outer legs out to the 2.54 mm holes; flat face as the silk
+R1 R2 R3 R4 R15,5,fit,6k8,Resistor 6k8 1 % 0.25 W metal film,Multicomp Pro,MF25 6K8,9342168,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,
+R12,1,fit,470,Resistor 470R 1 % 0.25 W,Multicomp Pro,MF25 470R,9341943,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,was 1k: 470R matches D1 to D2 (~2.8 mA each)
+R13,1,fit,470,Resistor 470R 1 % 0.25 W,Multicomp Pro,MF25 470R,9341943,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,
+R14,1,fit,100,Resistor 100R 1 % 0.25 W,Multicomp Pro,MF25 100R,9341099,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,BZ1 series
+R5 R7,2,fit,680,Resistor 680R 1 % 0.25 W,Multicomp Pro,MF25 680R,9342150,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,
+R6 R8 R11 R18,4,fit,10k,Resistor 10k 1 % 0.25 W,Multicomp Pro,MF25 10K,9341110,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,"R18 stands upright (2.54 mm holes), at the left edge"
+R9 R10,2,fit,4k7,Resistor 4k7 1 % 0.25 W (I²C pull-ups),Multicomp Pro,MF25 4K7,9341951,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,"always fitted: fine with or without pull-ups on the module (AUDIT R37); under the module, so fit before it"
+RN1,1,fit,10k bussed,"Resistor network 10k x 8, bussed, SIP-9 (pin 1 = common, dot)",Bourns,4609X-101-103LF,9356819,R_Array_SIP9,pin 1 = square pad
+RN2,1,fit,10k bussed,"Resistor network 10k x 4, bussed, SIP-5 (pin 1 = common, dot)",Bourns,4605X-101-103LF,9356061,R_Array_SIP5,pin 1 = square pad
+RN3,1,fit,1k bussed,"Resistor network 1k x 4, bussed, SIP-5",Bourns,4605X-101-102LF,9356053,R_Array_SIP5,"1k bus pull-ups, as a real 1541; pin 1 (dot) = square pad; only on USB power (AUDIT R39)"
+SW1,1,fit,EC11 + push,"Rotary encoder with push switch, 15 PPR / 30 detents, 20 mm D shaft, 0.5 mm travel",Alps Alpine,EC11E15244G1,2064986,EC11E_Switch_Alps,NOT the B2 (1.5 mm travel): the knob would bottom
+D3,1,do not fit,1N5819,"Schottky 1N5819, DO-41",Vishay,1N5819-E3/54,1336533,D_DO-41_SOD81_P10.16mm_Horizontal,only with J6 (external 5 V)
+J6,1,do not fit,+5V ext,"Pin header 1 x 2, 2.54 mm",Würth,61304011121 (cut),,PinHeader_1x02_P2.54mm_Vertical,"external 5 V, with D3; 2 pins cut from the strip"
+J7,1,do not fit,spare GPIO,"Pin header 1 x 5, 2.54 mm (spare GP2/3/6, 3V3, GND)",Würth,61304011121 (cut),,PinHeader_1x05_P2.54mm_Vertical,optional; 5 pins cut from the 1 x 40 strip
+Q3,1,do not fit,2N3904,"NPN 2N3904, TO-92 (E-B-C)",onsemi,2N3904BU,1700648,TO-92_Inline_Wide,"SRQ out (rev 1): fit only if a fast serial mode ever needs it, with R16 and R17"
+R16,1,do not fit,680,Resistor 680R 1 % 0.25 W,Multicomp Pro,MF25 680R,9342150,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,with Q3 only
+R17,1,do not fit,10k,Resistor 10k 1 % 0.25 W,Multicomp Pro,MF25 10K,9341110,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,with Q3 only
+(off board),1,fit,,"Pin header strip 1 x 40, 2.54 mm, breakaway: cut J5, JP1, JP2 (3 each), J6 (2), J7 (5)",Würth,61304011121,2356175,,one strip instead of three Harwin lines (Farnell minimums of 10-100)
+(off board),2,fit,,"Jumper cap 2.54 mm (JP1, JP2)",Harwin,M7686-46,3756818,,order code unique in Farnell search (M7566-05's 150411 was not)
+(off board),4,fit,,"Printed OLED pillar, snaps into H5-H8 (case file, part ""oled_pillars"")",,,,,no screws: they slide onto the module's edges (BUILD-NOTES: OLED)
+(off board),1,fit,,"OLED module 1.3"" SH1106, I²C, 4-pin (VCC/GND order either way)",[C] any,,,,measure it for the pillars (BUILD-NOTES: OLED)
+(off board),4,fit,,M2.6 x 16 countersunk self-tapping screw,[C] any,,,,from below into the lid posts (picod64-lid-front.stl + picod64-lid-rear.stl)
+(off board),(4),fit,,"OPTIONAL: M3 x 16 countersunk machine screw + M3 heat-set insert (Ø4.0 mm hole, <= 7 mm long)",[C] any,,,,"instead, only with the picod64-lid-*-insert.stl pair, for a case opened often"
+(off board),4,fit,,"Self-adhesive rubber foot, 10 mm (max 10.6)",[C] any,,,,"stick on over the screw heads, in the recesses"
+(off board),2,fit,,"Printed LED standoff (case file, part ""led_standoffs"")",,,,,sets D1/D2 so the dome stands 1.5 mm proud of the lid; needs >= 14 mm of LED lead
+(off board),1,fit,,"Printed case: tray; lid front + lid rear, top face down; knob; 4 OLED spacers; 2 LED standoffs (no brim, no supports)",,,,,case/picod64-case.scad

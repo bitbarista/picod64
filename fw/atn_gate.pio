@@ -1,0 +1,16 @@
+; PicoD64 -- the 1541's ATN acknowledge gate, in PIO (core/drive1541.h PLAT_IEC_GATE).
+; On a real 1541 DATA follows ATN at once through an XOR gate [S7]; in software the
+; answer came ~24 us late and FB64 Turbo sent its first byte into the void (2026-10-30).
+; Config from core 1 (TX FIFO, newest wins; X keeps the last): bit 0 = pull DATA while ATN
+; is released, bit 1 = pull DATA while ATN is asserted. JMP pin = ATN_IN (GP12: high =
+; released, through the divider). Out pin = DATA_OUT (GP17: high = the 2N3904 pulls DATA).
+; Five instructions a loop: DATA follows ATN in ~40 ns at 150 MHz (+2 cycles of input sync).
+.program atn_gate
+.wrap_target
+    pull noblock            ; OSR <- the newest config, or X when there is none
+    mov x, osr
+    jmp pin released        ; ATN released?
+    out null, 1             ; asserted: skip bit 0
+released:
+    out pins, 1             ; DATA_OUT = this case's bit
+.wrap

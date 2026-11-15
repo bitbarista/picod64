@@ -1,0 +1,11 @@
+# The router's HARD floor. Supplying this file disables the
+# router's standard->advanced escalation, so it can no longer relax clearances
+# below these to finish a net (the first run dropped to 0.127 mm doing exactly that).
+# Values are comfortably inside JLCPCB's standard 2-layer capability; the same
+# numbers are the DRC rules in picod64.kicad_pro, so DRC checks them too.
+clearance    = 0.22   # 0.02 above the DRC rule: the router grid lands 0.0012 mm inside 0.2 at the Pico's custom GND pads
+track_width  = 0.25
+via_diameter = 0.6
+via_drill    = 0.3
+hole_to_hole = 0.25
+board_edge   = 0.5

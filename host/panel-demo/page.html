@@ -1,0 +1,264 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PicoD64 Front Panel Demo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: the printed lid, seen from above, is the instrument; everything else is a bench note beside it. */
+:root{color-scheme:dark;
+  --bench:#17140f;--panel:#211d17;--line:#3a3329;--text:#ebe3d3;--dim:#a99d88;
+  --oled:#9fdcff;--amber:#e8b54a;--on:#57e37b;--red:#ff5147;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"IBM Plex Sans",system-ui,sans-serif}
+html,body{height:auto}
+body{background:var(--bench);color:var(--text);font:15px/1.5 var(--sans);padding-block:24px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1360px;margin:auto;display:grid;gap:22px}
+header h1{font:600 22px/1.2 var(--sans);margin:0}
+header p{margin:4px 0 0;color:var(--dim);max-width:68ch}
+.main{display:grid;grid-template-columns:minmax(0,1fr);gap:24px;align-items:start;justify-items:center}
+.left{display:grid;gap:16px;min-width:0;max-width:100%}
+.right{display:grid;gap:16px;min-width:0;width:100%;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));align-items:start}
+@media(min-width:1320px){.main{grid-template-columns:auto minmax(320px,1fr);justify-items:stretch}.right{grid-template-columns:minmax(0,1fr)}}
+.right figure{margin:0}
+.right figure img{display:block;width:100%;height:auto}
+
+/* the case: pictures from the real model; everything on it is placed in mm from geom.json */
+.case{position:relative;background:url("@@TOP@@") center/100% 100% no-repeat;filter:drop-shadow(0 16px 26px #000a)}
+#oled{position:absolute;display:block;background:#04060b}
+.lamp{position:absolute;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;background:radial-gradient(circle at 42% 38%,#d9ffe0,var(--on) 45%,#1c7a35 100%);box-shadow:0 0 10px 3px #57e37b99}
+.knob{position:absolute;transform:translate(-50%,-50%);border-radius:50%;touch-action:none;cursor:grab;filter:drop-shadow(0 7px 7px #0009)}
+.knob.down{filter:drop-shadow(0 3px 3px #000b)}
+.knob:active{cursor:grabbing}
+.knob.centre{cursor:pointer}
+.knob img{display:block;width:100%;height:100%;max-width:none;pointer-events:none;transform:rotate(var(--turn,0deg))}
+.knob.down img{transform:rotate(var(--turn,0deg)) scale(.97)}
+
+/* controls */
+.keys{display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:8px}
+button{font:500 14px/1.2 var(--sans);color:var(--text);background:#2e2820;border:1px solid var(--line);border-radius:6px;padding:11px 8px;cursor:pointer;touch-action:manipulation}
+button:hover{background:#39322a}
+button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.knob:focus,.knob:focus-visible{outline:none}
+button.push.down{background:var(--amber);color:#201605}
+.hint{margin:0;color:var(--dim);font-size:13.5px}
+kbd{font:500 12px var(--mono);border:1px solid var(--line);background:#2a251d;border-radius:4px;padding:0 5px;color:var(--text)}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:grid;gap:10px;min-width:0}
+.card h2{font:600 12px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--amber);margin:0}
+dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:14px}
+dt{color:var(--dim)}
+dd{margin:0;font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btns button{font-size:13px;padding:9px 6px}
+ol{margin:0;padding-left:20px;display:grid;gap:5px;font-size:14px}
+#log{font:12.5px/1.45 var(--mono);color:var(--dim);max-height:9.5em;overflow:auto;min-height:3em}
+#log div:first-child{color:var(--text)}
+.note{color:var(--dim);font-size:13.5px;margin:0}
+#fail{background:#4a1d19;border:1px solid var(--red);padding:12px;border-radius:6px}
+</style>
+<div class="wrap">
+  <header>
+    <h1>PicoD64 front panel demo</h1>
+    <p>The case and knob are rendered from the real 3D model, at about life size on a typical laptop screen. The display runs the firmware's own <code>fw/ui.c</code>, so these are the pixels the board would send to its OLED. The SD card is an invented sample.</p>
+  </header>
+  <div id="fail" hidden></div>
+  <div class="main">
+    <div class="left">
+      <div class="case" id="case" role="group" aria-label="The PicoD64 case from above">
+        <canvas id="oled" width="128" height="64" aria-label="OLED, 128 by 64 pixels"></canvas>
+        <div class="lamp" id="pwr"></div>
+        <div class="knob" id="knob" tabindex="0" role="slider" aria-label="Knob: arrow keys turn, space pushes" aria-valuetext="">
+          <img id="knobimg" src="@@KNOB@@" alt="">
+        </div>
+      </div>
+      <div class="keys">
+        <button id="ccw">Turn left</button>
+        <button id="push" class="push">Push (hold for long)</button>
+        <button id="cw">Turn right</button>
+      </div>
+      <p class="hint">Keyboard: <kbd>←</kbd> <kbd>→</kbd> or <kbd>↑</kbd> <kbd>↓</kbd> turn, <kbd>Space</kbd> pushes, and holding it for 0.7 s is a long press. Mouse: scroll on the knob or drag its edge to turn; press its centre to push.</p>
+    </div>
+    <div class="right">
+      <section class="card">
+        <h2>Right now</h2>
+        <dl>
+          <dt>C64 sees</dt><dd id="s-bus"></dd>
+          <dt>Disk in drive</dt><dd id="s-disk"></dd>
+          <dt>Device</dt><dd id="s-dev"></dd>
+          <dt>Sound</dt><dd id="s-snd"></dd>
+          <dt>SD card</dt><dd id="s-card"></dd>
+        </dl>
+      </section>
+      <section class="card">
+        <h2>The whole case</h2>
+        <figure><img src="@@VIEW@@" alt="The assembled PicoD64 case at an angle, with a raised rear section, the OLED, two LEDs and the knob on the lower front"></figure>
+        <p class="note">About 106 × 91 mm. Two IEC sockets and USB are at the rear, and the microSD slot is on the front edge. Colours are one example print; yours depend on your filament.</p>
+      </section>
+      <section class="card">
+        <h2>Try</h2>
+        <ol>
+          <li>Open <b>Games</b>, insert <b>Starfall (Disk 1 of 3)</b>, then hold the knob to go to the next disk.</li>
+          <li>Open <b>Collection</b> to feel a long list. In <b>Games</b>, rest on the long adventure name and watch it slide.</li>
+          <li>Turn back one click from the top of the list to reach <b>Settings</b>, with <b>Sound</b> and <b>New disk</b>.</li>
+          <li>Leave the list for 15 s: it returns to the status screen.</li>
+        </ol>
+      </section>
+      <section class="card">
+        <h2>Board</h2>
+        <div class="btns">
+          <button id="b-power">Power cycle</button>
+          <button id="b-held">Power on, knob held</button>
+          <button id="b-card">Pull SD card</button>
+          <button id="b-rom">Delete ROM from card</button>
+          <button id="b-font">Add plain font to card</button>
+        </div>
+        <p class="note">Power cycling keeps the device number, the sound setting and any new disks. Reloading the page starts again. ROM and font changes apply at the next power cycle.</p>
+      </section>
+      <section class="card">
+        <h2>Log</h2>
+        <div id="log" aria-live="polite"></div>
+      </section>
+      <p class="note">Not simulated: the C64 and its browser, sound, the ACT light, the knob's feel and which way round it decodes, and the optional Commodore font from <code>/chargen.bin</code>. The OLED's colour depends on the module you bought.</p>
+    </div>
+  </div>
+</div>
+<script>
+(async function(){
+const $=id=>document.getElementById(id);
+const G=@@GEOM@@;
+const b64="@@WASM@@";
+let m;
+try{
+  const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
+  m=(await WebAssembly.instantiate(bytes,{})).instance.exports;
+}catch(e){
+  const f=$('fail');f.hidden=false;f.textContent="The demo couldn't start here: "+e.message+". Open panel-demo.html from the repo in a browser instead.";
+  return;
+}
+const str=p=>{const b=new Uint8Array(m.memory.buffer);let e=p;while(b[e])e++;return new TextDecoder().decode(b.subarray(p,e))};
+const now=()=>Math.floor(performance.now())+1000;
+const ctx=$('oled').getContext('2d');
+let pushed=false,lastFrame='',angle=0,scale=1;
+/* Whole screen pixels per OLED pixel, or the font's strokes come out uneven. So the OLED's size is picked first,
+   and the case is sized from it, keeping the model's proportions. */
+function fit(){
+  const main=document.querySelector('.main'),d=devicePixelRatio||1,cs=$('case'),c=$('oled');
+  const wide=matchMedia('(min-width:1320px)').matches;
+  const avail=main.clientWidth-(wide?344:0);
+  const perS=G.w/G.oled_w*128/d;                       /* case width (CSS px) per whole step */
+  let s=Math.max(1,Math.floor(avail/perS));
+  while(s>1&&perS*s>940)s--;
+  let W=perS*s,cssW;
+  if(W>avail){W=avail;cssW=W*G.oled_w/G.w;scale=1;c.style.imageRendering='pixelated'}
+  else{cssW=128*s/d;scale=s;c.style.imageRendering=''}
+  cs.parentElement.style.width=W+'px';
+  cs.style.width=W+'px';cs.style.height=W*G.l/G.w+'px';
+  const mm=W/G.w,snap=v=>Math.round(v*d)/d;
+  c.width=128*scale;c.height=64*scale;
+  c.style.width=cssW+'px';c.style.height=cssW/2+'px';
+  c.style.left=snap(G.ox*mm-cssW/2)+'px';c.style.top=snap((G.l-G.oy)*mm-cssW/4)+'px';
+  const pos=(el,x,y,w)=>{el.style.left=x*mm+'px';el.style.top=(G.l-y)*mm+'px';el.style.width=el.style.height=w*mm+'px'};
+  pos($('knob'),G.kx,G.ky,G.knob_box);pos($('pwr'),G.px,G.py,3);
+  lastFrame='';
+}
+new ResizeObserver(fit).observe(document.querySelector('.main'));fit();
+
+function draw(){
+  const b=new Uint8Array(m.memory.buffer,m.sim_fb(),8*132);
+  let key='';for(let i=0;i<b.length;i+=1)key+=String.fromCharCode(b[i]);
+  if(key===lastFrame)return;lastFrame=key;
+  const c=$('oled'),z=scale;
+  ctx.fillStyle='#04060b';ctx.fillRect(0,0,c.width,c.height);
+  ctx.fillStyle='#9fdcff';
+  for(let p=0;p<8;p++)for(let x=0;x<128;x++){            /* columns 2..129: what the panel shows */
+    const v=b[p*132+x+2];if(!v)continue;
+    for(let r=0;r<8;r++)if(v>>r&1)ctx.fillRect(x*z,(p*8+r)*z,z>3?z-1:z,z>3?z-1:z);
+  }
+}
+const logEl=$('log');
+function log(t){const d=document.createElement('div');d.textContent=t;logEl.prepend(d);while(logEl.children.length>30)logEl.lastChild.remove()}
+let prev={};
+function panel(){
+  const s={online:m.sim_online(),disk:str(m.sim_mounted()),dev:m.sim_device(),snd:m.sim_sound(),card:m.sim_card_in(),made:str(m.sim_made()),booted:m.sim_booted(),swap:m.sim_swapping()};
+  $('s-bus').textContent=!s.booted?'nothing yet (starting up)':s.online?'the emulated 1541':'browse mode';
+  $('s-disk').textContent=s.swap?'changing disk…':(s.disk?s.disk:'none');
+  $('s-dev').textContent='#'+s.dev;
+  $('s-snd').textContent=s.snd?'on':'off';
+  $('s-card').textContent=s.card?'in':'out';
+  $('b-card').textContent=s.card?'Pull SD card':'Insert SD card';
+  if(prev.disk!==undefined){
+    if(s.disk!==prev.disk)log(s.disk?'Disk in: '+s.disk:'Drive empty, back to browse mode');
+    if(s.snd!==prev.snd)log('Sound '+(s.snd?'on':'off')+', saved to the card');
+    if(s.dev!==prev.dev)log('Device #'+s.dev+', saved');
+    if(s.made!==prev.made&&s.made)log('Created on the card: '+s.made);
+    if(s.booted&&!prev.booted)log('Ready');
+  }
+  prev=s;
+}
+function turn(d){
+  m.sim_turn(d,now());angle+=d*12;
+  $('knob').style.setProperty('--turn',angle+'deg');
+  draw();
+}
+function setPush(on){
+  if(on===pushed)return;pushed=on;
+  $('knob').classList.toggle('down',on);$('push').classList.toggle('down',on);
+}
+function frame(){
+  m.sim_tick(now(),pushed?1:0);
+  draw();panel();
+  requestAnimationFrame(frame);
+}
+
+/* pointer: the middle of the knob pushes, its edge turns */
+const knob=$('knob');
+const polar=e=>{const r=knob.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;return{a:Math.atan2(y,x)*180/Math.PI,r:Math.hypot(x,y)/(r.width/2)}};
+let drag=null;
+knob.addEventListener('pointerdown',e=>{
+  knob.focus({preventScroll:true});knob.setPointerCapture(e.pointerId);e.preventDefault();
+  const q=polar(e);
+  if(q.r<.62){drag='push';setPush(true)}else drag={last:q.a,acc:0};
+});
+knob.addEventListener('pointermove',e=>{
+  const q=polar(e);
+  if(!drag){knob.classList.toggle('centre',q.r<.62);return}
+  if(drag==='push')return;
+  let d=q.a-drag.last;if(d>180)d-=360;if(d<-180)d+=360;drag.last=q.a;drag.acc+=d;
+  while(drag.acc>=12){turn(1);drag.acc-=12}
+  while(drag.acc<=-12){turn(-1);drag.acc+=12}
+});
+const endDrag=()=>{if(drag==='push')setPush(false);drag=null};
+knob.addEventListener('pointerup',endDrag);knob.addEventListener('pointercancel',endDrag);
+let wheel=0;
+knob.addEventListener('wheel',e=>{e.preventDefault();wheel+=e.deltaY;if(Math.abs(wheel)>=40){turn(wheel>0?1:-1);wheel=0}},{passive:false});
+
+/* buttons */
+$('ccw').onclick=()=>turn(-1);$('cw').onclick=()=>turn(1);
+const pb=$('push');
+pb.addEventListener('pointerdown',e=>{e.preventDefault();pb.setPointerCapture(e.pointerId);setPush(true)});
+pb.addEventListener('pointerup',()=>setPush(false));pb.addEventListener('pointercancel',()=>setPush(false));
+
+/* keyboard */
+window.addEventListener('keydown',e=>{
+  if(e.altKey||e.ctrlKey||e.metaKey)return;
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();turn(1)}
+  else if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();turn(-1)}
+  else if(e.key===' '){e.preventDefault();if(!e.repeat)setPush(true)}
+});
+window.addEventListener('keyup',e=>{if(e.key===' '){e.preventDefault();setPush(false)}});
+window.addEventListener('blur',()=>setPush(false));
+
+/* board */
+let romIn=1;
+const blurAfter=f=>e=>{f();e.currentTarget.blur()};
+$('b-power').onclick=blurAfter(()=>{setPush(false);m.sim_power(0,now());log('Power cycle')});
+$('b-held').onclick=blurAfter(()=>{m.sim_power(1,now());setPush(true);log('Power on with the knob held: pick a device number, then press to save');setTimeout(()=>setPush(false),900)});
+$('b-card').onclick=blurAfter(()=>{const i=m.sim_card_in()?0:1;m.sim_card(i,now());log(i?'SD card in':'SD card out')});
+$('b-rom').onclick=blurAfter(()=>{romIn=romIn?0:1;m.sim_rom(romIn);$('b-rom').textContent=romIn?'Delete ROM from card':'Put ROM back on card';log(romIn?'dos1541.bin back on the card':'dos1541.bin deleted: power cycle to see the result')});
+let fontOn=0;
+$('b-font').onclick=blurAfter(()=>{fontOn=fontOn?0:1;m.sim_font_file(fontOn);$('b-font').textContent=fontOn?'Remove plain font from card':'Add plain font to card';log(fontOn?'font5x7.bin on the card: power cycle to see it':'font5x7.bin deleted: power cycle to see the result')});
+$('ccw').addEventListener('click',e=>e.currentTarget.blur());$('cw').addEventListener('click',e=>e.currentTarget.blur());
+
+m.sim_card_reset();
+m.sim_power(0,now());
+frame();
+})();
+</script>

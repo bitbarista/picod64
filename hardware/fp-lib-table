@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "picod64")(type "KiCad")(uri "${KIPRJMOD}/lib/picod64.pretty")(options "")(descr "PicoD64 project footprints: gen/gen_footprints.py, plus the Pico 2 hand-solder footprint"))
+)

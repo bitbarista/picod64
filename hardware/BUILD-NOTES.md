@@ -51,8 +51,18 @@ Q3 + R16 + R17 (an SRQ output), J7 (spare GPIO header).
 
 ## 4. The OLED
 
-- **Jumpers:** put the JP1/JP2 caps toward **V** for the module pin marked VCC and toward **G** for GND. For
-  a module with pin 1 VSS, pin 2 VDD: JP1 → G and JP2 → V (A10, D2).
+- **Set the two jumpers before you plug the display in.** OLED modules don't all put power on the same pins:
+  read the four labels on your module's header, left to right. The last two are always SCL and SDA; the
+  first two are GND and VCC, in either order. JP1 sets the first pin and JP2 the second: put each cap on the
+  **G** side for GND (or VSS) and the **V** side for VCC (or VDD).
+
+  | Your module's labels | JP1 | JP2 |
+  |---|---|---|
+  | GND VCC SCL SDA (or VSS VDD SCL SDA) | G | V |
+  | VCC GND SCL SDA | V | G |
+
+  The module the board was designed around, and the sellers' drawings checked, are the first kind. A wrong setting can't harm the board, but it can damage the display, so check
+  before switching on (AUDIT A10, D2).
 - **Held by four printed pillars, no screws** ([`case/stl/picod64-oled-pillars.stl`](../case/stl/picod64-oled-pillars.stl), all the same). Each has a
   split peg at one end and a groove at the other that takes the module's PCB edge, so they suit any module's
   hole pattern.

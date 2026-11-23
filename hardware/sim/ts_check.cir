@@ -1,0 +1,14 @@
+* onsemi 2N3904 model at the datasheet's storage-time test: IC = 10 mA, IB1 = IB2 = 1 mA, VCC = 3 V (2N3903-D, ts <= 200 ns, Fig. 7 ~120 ns typ)
+.include ../../datasheets/parts/onsemi_2n3904.lib
+* base driven by a current source: +1 mA, then -1 mA (as IB1 = IB2), collector 3 V through 300 ohm (~10 mA)
+Ib 0 base PWL(0 0 1u 0 1.001u 1m 3u 1m 3.001u -1m 6u -1m)
+Dclamp 0 base Dneg
+.model Dneg D(IS=1e-14)
+Rc vcc col 300
+Vcc vcc 0 3
+Q1 col base 0 Q2n3904
+.tran 0.2n 6u
+* storage: from the base current reversing to the collector rising through 10 % of its swing
+.meas tran vsat FIND v(col) AT=2.9u
+.meas tran ts WHEN v(col)=0.3 RISE=1 TD=3u
+.end

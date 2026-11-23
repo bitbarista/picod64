@@ -310,6 +310,11 @@ static FF_C1 void bus_check_reset(void)
     int edge = BUS_RESET_EDGE(), r = bus_reset();
     if ((r || edge) && (!B.reset_prev || edge)) {
         B.resets++;
+#ifdef BUS_REBOOT_ON_RESET
+        /* the board: everything restarts, as a real 1541 does on the cable's RESET [S7]; no state of
+         * the last session can reach the next (2026-11-17) */
+        if (BUS_REBOOT_ON_RESET()) { B.reset_prev = r; return; }
+#endif
         if (B.online && !B.knob_disk && B.sw == SW_NONE) {
             /* a disk the browser put in comes out with a reset, and browse mode goes to the root: LOAD"*",8 after a
              * reset is the browser again, which reopens on that disk (2026-11-07). The knob's disks stay in */

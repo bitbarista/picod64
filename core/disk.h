@@ -17,8 +17,12 @@
  *     gap much longer, "in excess of 100 bytes" (p.117).
  * D64: the 683 sectors in track order, 256 bytes each (174,848 bytes) [S11:
  * VICE's c1541 as a black box; its sector dumps match these offsets in every
- * zone, 2026-10-29]. ⚠ Not handled yet [A]: 40-track images (196,608 bytes),
- * and images with an error byte per sector.
+ * zone, 2026-10-29]. Tracks 36-42 (17 sectors each, as 31-35) follow: fw/storage.c.
+ * Error bytes [S21]: a D64 may end in one byte per sector, in sector order: the
+ * drive controller's code for that sector on the original disk, $01 = OK. The
+ * codes are S10's FDC error codes (the error channel shows code + 18: S10 ch. 6, the job queue).
+ * d64_track_sectors_err() builds each error into the GCR, so the DOS finds it
+ * there as it would on the disk.
  * ------------------------------------------------------------------------- */
 #ifndef FF_DISK_H
 #define FF_DISK_H
@@ -208,26 +212,43 @@ static inline void d64_track_sectors(const uint8_t *sec, int t, uint8_t id1, uin
 static inline void d64_track(const uint8_t *d64, int t, uint8_t id1, uint8_t id2, uint8_t *out)
 { d64_track_sectors(d64 + d64_offset(t, 0), t, id1, id2, out); }
 
-/* the same, from this track's sectors only (sec[s * 256]) */
-static inline void d64_track_sectors(const uint8_t *sec, int t, uint8_t id1, uint8_t id2, uint8_t *out)
+/* D64 error codes [S21], the FDC's [S10 ch. 6]: what each does to the sector's GCR.
+ *   $02 (20) header not found: the header's $08 is not $08
+ *   $03 (21) no SYNC: the sector's two SYNCs are gap instead (a whole track of them: no SYNC at all)
+ *   $04 (22) data block not present: the block's $07 is not $07
+ *   $05 (23) data checksum: the checksum is wrong
+ *   $09 (27) header checksum: the checksum is wrong
+ *   $0B (29) disk ID mismatch: the header's two ID bytes inverted (its checksum, an EOR of both, unchanged)
+ * Anything else ($01 OK, and the write-only codes $06-$08, $0A, $0F) leaves the sector as it is. */
+#define D64_ERR_OK 0x01
+static inline void d64_track_sectors_err(const uint8_t *sec, int t, uint8_t id1, uint8_t id2, const uint8_t *err, uint8_t *out)
 {
     uint8_t *o = out, *end = out + d64_track_bytes(t);
     for (int s = 0; s < d64_sectors(t); s++) {
-        uint8_t h[8] = { 0x08, (uint8_t)(t ^ s ^ id1 ^ id2), (uint8_t)s, (uint8_t)t, id2, id1, 0x0F, 0x0F };
-        o = gcr_put(o, 0xFF, 5);
+        int e = err ? err[s] : D64_ERR_OK;
+        uint8_t i1 = e == 0x0B ? (uint8_t)~id1 : id1, i2 = e == 0x0B ? (uint8_t)~id2 : id2;
+        uint8_t h[8] = { 0x08, (uint8_t)(t ^ s ^ i1 ^ i2), (uint8_t)s, (uint8_t)t, i2, i1, 0x0F, 0x0F };
+        if (e == 0x02) h[0] = 0x00;
+        if (e == 0x09) h[1] ^= 0xFF;
+        uint8_t sync = e == 0x03 ? 0x55 : 0xFF;
+        o = gcr_put(o, sync, 5);
         o = gcr_block(o, h, 8);
         o = gcr_put(o, 0x55, 8);
-        o = gcr_put(o, 0xFF, 5);
+        o = gcr_put(o, sync, 5);
         uint8_t blk[260], ck = 0;
         const uint8_t *src = sec + s * 256;
-        blk[0] = 0x07;
+        blk[0] = e == 0x04 ? 0x00 : 0x07;
         for (int i = 0; i < 256; i++) { blk[1 + i] = src[i]; ck ^= src[i]; }
-        blk[257] = ck; blk[258] = 0; blk[259] = 0;
+        blk[257] = e == 0x05 ? (uint8_t)~ck : ck; blk[258] = 0; blk[259] = 0;
         o = gcr_block(o, blk, 260);
         if (s + 1 < d64_sectors(t)) o = gcr_put(o, 0x55, d64_tail_gap(t));
     }
     gcr_put(o, 0x55, (int)(end - o));                  /* the long gap before sector 0 */
 }
+
+/* the same with no errors, from this track's sectors only (sec[s * 256]) */
+static inline void d64_track_sectors(const uint8_t *sec, int t, uint8_t id1, uint8_t id2, uint8_t *out)
+{ d64_track_sectors_err(sec, t, id1, id2, 0, out); }
 
 /* Whole D64 into a disk_t, framed; buf must hold the sum of d64_track_bytes
  * (252,004), pool D64_TRACKS framings. */
@@ -284,7 +305,11 @@ static inline int64_t gcr_after_sync(const uint8_t *t, uint32_t nbits, uint32_t 
 /* Decode track t of a disk into sec[s * 256] (this track's sectors only).
  * Returns a mask, bit s set for each sector found with a good header, data
  * block and checksum; sectors not found are left as they were. */
+static inline uint32_t disk_track_to_sectors_id(const disk_t *dk, int t, uint8_t *sec, uint16_t *ids);
 static inline uint32_t disk_track_to_sectors(const disk_t *dk, int t, uint8_t *sec)
+{ return disk_track_to_sectors_id(dk, t, sec, 0); }
+/* the same; ids (if given): each found sector's header ID, ID 2 << 8 | ID 1 */
+static inline uint32_t disk_track_to_sectors_id(const disk_t *dk, int t, uint8_t *sec, uint16_t *ids)
 {
     const uint8_t *g = dk->gcr[2 * (t - 1)];
     if (!g) return 0;
@@ -304,6 +329,7 @@ static inline uint32_t disk_track_to_sectors(const disk_t *dk, int t, uint8_t *s
                 if (ck == blk[257] && !seen[hdr[2]]) {
                     for (int i = 0; i < 256; i++) sec[hdr[2] * 256 + i] = blk[1 + i];
                     seen[hdr[2]] = 1; found |= 1u << hdr[2];
+                    if (ids) ids[hdr[2]] = (uint16_t)(hdr[4] << 8 | hdr[5]);
                 }
             }
         }

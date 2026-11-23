@@ -1,0 +1,34 @@
+* PicoD64 IEC output: one line (CLK or DATA), pull and release as the C64's CIA sees them (2026-11-21).
+* First check (AUDIT B8): with today's parts it must give the measured release lag, 254 ns (CLK) / 240 ns (DATA),
+* from serial O. Only then are other R5/R6 values worth believing.
+*   ngspice -b hardware/sim/iec_edge.cir     (parameters below; sweeps by hardware/sim/sweep.py)
+.include ../../datasheets/parts/onsemi_2n3904.lib
+
+.param rio=170        ; the Pico pin's own resistance: <= 170 ohm at the 4 mA setting (RP2350: VOH >= 2.62 V at 4 mA)
+.param rb=680         ; R5/R7, base resistor
+.param rpd=10k        ; R6/R8, base pull-down
+.param cbus=150p      ; [A] the line's capacitance: cable, both boards' inputs, the 7406 and transistor outputs
+.param vth=1.4        ; [A] the CIA's switching point (6526: VIL 0.8 V, VIH 2.0 V)
+
+* the GPIO: 0 -> 3.3 V at 1 us (pull), 3.3 -> 0 V at 4 us (release), 2 ns edges (fast slew [A])
+Vpin pin0 0 PULSE(0 3.3 1u 2n 2n 3u 10u)
+Rio pin0 pin {rio}
+R5 pin base {rb}
+R6 base 0 {rpd}
+Q1 bus base 0 Q2n3904
+
+* the bus: the C64's 1k to +5 V (R28-R30, 251138 rev B), PicoD64's RN3 1k from VBUS through D4 (1N5819, ~0.3 V [A])
+Vc64 vc64 0 5.0
+Rc64 vc64 bus 1k
+Vrn3 vrn3 0 4.7
+Rrn3 vrn3 bus 1k
+* PicoD64's own input divider, 6k8 over 10k (R1-R4, RN2)
+Rdiv bus 0 16.8k
+Cbus bus 0 {cbus}
+
+.tran 0.5n 7u
+.meas tran tpull  TRIG v(pin0) VAL=1.65 RISE=1 TARG v(bus) VAL={vth} FALL=1
+.meas tran trel   TRIG v(pin0) VAL=1.65 FALL=1 TARG v(bus) VAL={vth} RISE=1
+.meas tran lag    PARAM='trel-tpull'
+.meas tran vlow   FIND v(bus) AT=3.5u
+.end

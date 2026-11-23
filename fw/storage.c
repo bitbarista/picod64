@@ -317,11 +317,18 @@ static int ext_tracks = D64_TRACKS;
 static uint8_t ext_owner[EXT_SLOTS], ext_id1, ext_id2;
 static uint8_t *ext_gcr[EXT_SLOTS];
 static syncs_t *ext_sync[EXT_SLOTS];
+/* The D64's error bytes [S21], if it has them (a file of exactly 257 bytes a sector): one per sector, $01 OK.
+ * err_n = 0: none, and every track builds as it did without them */
+#define ERR_MAX (D64_SECTORS + 7 * 17)        /* 42 tracks: 802 */
+static uint8_t d64_err[ERR_MAX];
+static int err_n;
+static uint16_t err_id;                       /* the disk's ID at mount, ID 2 << 8 | ID 1, as headers are built */
+static const uint8_t *err_of(int t) { return err_n ? d64_err + d64_offset(t, 0) / 256 : 0; }
 static FIL ext_f;                     /* kept open: opening searches the folder, thousands of names perhaps */
 static int ext_open;
 static void ext_close(void) { if (ext_open) { f_close(&ext_f); ext_open = 0; } }
 int st_tracks(void) { return ext_tracks; }
-static int ext_forget(void) { ext_open = 0; ext_tracks = D64_TRACKS; return 0; }
+static int ext_forget(void) { ext_open = 0; ext_tracks = D64_TRACKS; err_n = 0; return 0; }
 
 /* (flatten: core 0's own copy, in flash; the build keeps disk_frame_track itself out of flash for core 1) */
 __attribute__((flatten, noinline)) static void ext_frame(const uint8_t *g, uint32_t n, syncs_t *r) { disk_frame_track(g, n, r); }
@@ -349,7 +356,7 @@ int st_track_poll(const char *path, disk_t *dk, volatile uint8_t *dirty, volatil
         dk->gcr[ho] = ext_gcr[s];
         return 0;
     }
-    d64_track_sectors(sec, t, ext_id1, ext_id2, ext_gcr[s]);
+    d64_track_sectors_err(sec, t, ext_id1, ext_id2, err_of(t), ext_gcr[s]);
     ext_frame(ext_gcr[s], (uint32_t)d64_track_bytes(t) * 8u, ext_sync[s]);
     dk->sync[ht] = ext_sync[s]; dk->len[ht] = (uint16_t)d64_track_bytes(t);
     __sync_synchronize();
@@ -363,11 +370,17 @@ int st_load_d64(const char *path, uint8_t *gcr, disk_t *dk, syncs_t *pool_, uint
     FIL f; UINT got;
     ext_close();
     ext_tracks = D64_TRACKS;
+    err_n = 0;
     if (!mounted || f_open(&f, real_path(path), FA_READ) != FR_OK) return 0;
-    int ok = f_size(&f) >= D64_BYTES;                 /* 174,848: 35 tracks; error bytes after are ignored [A] */
+    int ok = f_size(&f) >= D64_BYTES;                 /* 174,848: 35 tracks; more: tracks 36-42, error bytes */
     int tracks = D64_TRACKS;
     if (ok) tracks += (int)((f_size(&f) - D64_BYTES) / (17 * 256));   /* (a 40-track's error bytes are under a track) */
     if (tracks > 42) tracks = 42;
+    int nsec = D64_SECTORS + (tracks - D64_TRACKS) * 17;
+    if (ok && f_size(&f) == (FSIZE_t)nsec * 257) {    /* the error bytes, after the sectors [S21] */
+        ok = f_lseek(&f, (FSIZE_t)nsec * 256) == FR_OK && f_read(&f, d64_err, (UINT)nsec, &got) == FR_OK && got == (UINT)nsec;
+        for (int i = 0; ok && i < nsec; i++) if (d64_err[i] != D64_ERR_OK) { err_n = nsec; break; }   /* all OK: as none */
+    }
     uint8_t id1 = 0, id2 = 0;
     if (ok && f_lseek(&f, (FSIZE_t)d64_offset(18, 0)) == FR_OK && f_read(&f, sec, 256, &got) == FR_OK && got == 256) {
         id1 = sec[162]; id2 = sec[163];               /* the BAM's disk ID [S10 p.37], as d64_to_disk */
@@ -377,11 +390,13 @@ int st_load_d64(const char *path, uint8_t *gcr, disk_t *dk, syncs_t *pool_, uint
     for (int t = 1; ok && t <= D64_TRACKS; t++) {
         UINT n = (UINT)(d64_sectors(t) * 256);
         if (f_lseek(&f, (FSIZE_t)d64_offset(t, 0)) != FR_OK || f_read(&f, sec, n, &got) != FR_OK || got != n) { ok = 0; break; }
-        d64_track_sectors(sec, t, id1, id2, o);
+        d64_track_sectors_err(sec, t, id1, id2, err_of(t), o);
         dk->gcr[2 * (t - 1)] = o; dk->len[2 * (t - 1)] = (uint16_t)d64_track_bytes(t);
         o += d64_track_bytes(t);
     }
     f_close(&f);
+    if (!ok) err_n = 0;
+    err_id = (uint16_t)(id2 << 8 | id1);
     if (ok) disk_frame(dk, pool_, D64_TRACKS);
     if (ok && tracks > D64_TRACKS) {
         for (int i = 0; i < EXT_SLOTS; i++) {
@@ -397,7 +412,8 @@ int st_load_d64(const char *path, uint8_t *gcr, disk_t *dk, syncs_t *pool_, uint
 int st_write_track(const char *path, const disk_t *dk, int t, uint8_t *sec)
 {
     FIL f; UINT put;
-    uint32_t m = disk_track_to_sectors(dk, t, sec);
+    uint16_t ids[21];
+    uint32_t m = disk_track_to_sectors_id(dk, t, sec, ids);
     if (!m) return 0;
     ext_close();                          /* (its buffer would go stale) */
     if (!mounted || f_open(&f, real_path(path), FA_WRITE | FA_OPEN_EXISTING) != FR_OK) return -1;
@@ -406,6 +422,18 @@ int st_write_track(const char *path, const disk_t *dk, int t, uint8_t *sec)
         if (!(m & (1u << s))) continue;
         if (f_lseek(&f, (FSIZE_t)d64_offset(t, s)) != FR_OK || f_write(&f, sec + s * 256, 256, &put) != FR_OK || put != 256) { n = -1; break; }
         n++;
+    }
+    /* Error bytes: a sector the drive rewrote reads cleanly now, so its byte becomes OK. Clean, and with the
+     * disk's ID: a sector built with a wrong ID ($0B) reads back with that ID, so keeps it.
+     * ⚠ [A] a disk formatted to a new ID (N:name,id) keeps its error bytes */
+    if (err_n && n >= 0) {
+        uint8_t *e = d64_err + d64_offset(t, 0) / 256;
+        for (int s = 0; s < d64_sectors(t); s++) {
+            if (!(m & (1u << s)) || ids[s] != err_id || e[s] == D64_ERR_OK) continue;
+            e[s] = D64_ERR_OK;
+            FSIZE_t at = (FSIZE_t)err_n * 256 + (FSIZE_t)(e + s - d64_err);
+            if (f_lseek(&f, at) != FR_OK || f_write(&f, &e[s], 1, &put) != FR_OK || put != 1) { n = -1; break; }
+        }
     }
     if (f_close(&f) != FR_OK) n = -1;
     return n;

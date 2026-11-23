@@ -351,57 +351,6 @@ static void brx_xlist(browse_t *b, const uint8_t *a, int an)
     brx_turbo_ready(b, o);
 }
 
-/* A file out of the D64 b->img, into the start of buf: its length (load address included), or 0.
- * Used for the turbo on a mounted disk: the emulated drive is off the bus meanwhile (the browser sent CD_),
- * and the platform mounts the image again afterwards (turbo_remount). */
-static long brx_d64_off(int t, int s)
-{
-    static const uint8_t spt[35] = { 21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,
-                                     19,19,19,19,19,19,19, 18,18,18,18,18,18, 17,17,17,17,17 };
-    if (t < 1 || t > 35 || s >= spt[t - 1]) return -1;
-    long o = 0;
-    for (int i = 1; i < t; i++) o += spt[i - 1];
-    return (o + s) * 256;
-}
-#define BR_D64_AT 70000L
-static long brx_d64_file(browse_t *b, const uint8_t *pat, int pl)
-{
-    if (b->bmax < BR_D64_AT + 174848L) return 0;
-    uint8_t *d = b->buf + BR_D64_AT;
-    long sz = b->fs->read(b->ctx, b->img, d, b->bmax - BR_D64_AT);
-    if (sz < 174848L) return 0;
-    int t = 18, s = 1, steps = 0;
-    while (t && steps++ < 40) {
-        long so = brx_d64_off(t, s);
-        if (so < 0) return 0;
-        for (int i = 0; i < 8; i++) {
-            const uint8_t *en = d + so + i * 32;
-            if ((en[2] & 0x87) != 0x82) continue;            /* a closed PRG */
-            int match = pl == 1 && pat[0] == '*';
-            if (!match) {
-                match = 1;
-                for (int k = 0; k < 16; k++) {
-                    uint8_t want = k < pl ? pat[k] : 0xA0;
-                    if (en[5 + k] != want) { match = 0; break; }
-                }
-            }
-            if (!match) continue;
-            int ft = en[3], fs = en[4]; long o = 0; int guard = 0;
-            while (ft && guard++ < 700) {
-                long fo = brx_d64_off(ft, fs);
-                if (fo < 0) return 0;
-                int nt = d[fo], ns = d[fo + 1];
-                int cnt = nt ? 254 : (ns >= 2 ? ns - 1 : 0);
-                memcpy(b->buf + o, d + fo + 2, (size_t)cnt);
-                o += cnt; ft = nt; fs = ns;
-            }
-            return o;
-        }
-        t = d[so]; s = d[so + 1];
-    }
-    return 0;
-}
-
 /* The browser's settings, on the card: turbo on or off, the folder, the entry */
 #define BR_CFG "/.picod64.cfg"
 static char brx_cfg[BR_PATH + BR_NAME + 8];
@@ -490,10 +439,11 @@ static int brx_command(browse_t *b, const uint8_t *c, int n)
         return 1;
     }
     if (n >= 4 && c[0] == 'X' && c[1] == 'M' && c[2] == ':') {     /* XM:name (or *) a file from the D64 last mounted */
+        /* Refused (2026-11-17): the disk goes back in and the browser types a plain LOAD, so the drive
+         * loads the file itself, as a real 1541. Sent from the image, the drive was left never having
+         * read the disk (its ID 00 00), and a loader's own DOS job then failed with 29 (Shards of Fancy) */
         b->turbo_len = 0; b->turbo_remount = 1;
-        long fl = b->img[0] ? brx_d64_file(b, c + 3, n - 3) : 0;
-        if (fl < 3) { br_error(b, 62, " FILE NOT FOUND"); return 1; }   /* (the platform mounts it again: see turbo_remount) */
-        brx_turbo_ready(b, fl);
+        br_error(b, 62, " FILE NOT FOUND");           /* (the platform mounts it again: see turbo_remount) */
         return 1;
     }
     if (n == 2 && c[0] == 'X' && c[1] == 'R') {                    /* XR the settings: 00,CFG,t */

@@ -63,7 +63,7 @@ Older versions and the notes for each are on the [Releases page](https://github.
 
 **Open.** Hardware CERN-OHL-W, code GPL-3.0. Written clean-room from datasheets and Commodore's own documents, with every source listed.
 
-**Proven on a real C64:** the drive and its DOS, the browser and its turbo, and a list of demanding demo loaders and the 1541 Testsuite (see [Compatibility](#compatibility)). FB64, JiffyDOS and the turbo's speed figure come from the PC tests so far: [Status](#status-rev-11-november-2026) says what is proven where.
+**Proven on a real C64:** the drive and its DOS, the browser and its turbo, and a list of demanding demo loaders and the 1541 Testsuite (see [Compatibility](#compatibility)). JiffyDOS (KERNAL, and KERNAL plus drive ROM) is proven on a real C64 too. FB64 and the turbo's speed figure come from the PC tests so far: [Status](#status-rev-11-november-2026) says what is proven where.
 
 ## What it does
 
@@ -85,8 +85,9 @@ In detail.
   cursor keys and RETURN, type to filter, DEL for back, F1 for options (Run, Load, Run slow; for a disk Open,
   Run first, Insert), RUN/STOP to quit. Folders of any size; up to 2,048 entries are listed, and the filter
   reaches the rest. It remembers the turbo setting, the folder and the position on the card.
-- **A turbo for the browser.** Programs on the card and files in a D64 load at about 11 KB/s, ~27× stock (on
-  the PC twin), with no drive code. F3 turns it off, F1 Run slow skips it once, and any wrong byte falls
+- **A turbo for the browser.** Programs (PRG files) on the card load at about 11 KB/s, ~27× stock (on
+  the PC twin), with no drive code. Programs inside a D64 load the normal 1541 way, through the drive, so the
+  drive has read the disk as a real one would. F3 turns it off, F1 Run slow skips it once, and any wrong byte falls
   back to a plain LOAD.
 - **FB64 file browsers.** Made to work with Jani's **FB64** (FB v2.0), its fast-loader version
   **FB v2.0FL**, and **FB64 Turbo** ([CSDb 223021](https://csdb.dk/release/?id=223021)): browsing,
@@ -142,8 +143,8 @@ There's nothing to install or copy to the card, and nothing to add to the C64. I
 
 **Still to measure:** power from the datasette port; more fast loaders and games.
 
-**Known limits.** D64 images of 35, 40 and 42 tracks; a D64's error bytes are ignored (its data loads, the errors
-aren't reproduced); no G64, no D71/D81. The 6502's undocumented opcodes pass the 1541 Testsuite; its IRQ/SO edge
+**Known limits.** D64 images of 35, 40 and 42 tracks. A D64's error bytes are built into the disk, so the DOS
+finds each read error where the original disk had it; the write errors they can record are not. No G64, no D71/D81. The 6502's undocumented opcodes pass the 1541 Testsuite; its IRQ/SO edge
 timing is not yet checked against perfect6502.
 
 ## Compatibility
@@ -156,7 +157,7 @@ title from a freshly powered-up C64 and run to its end (or its own pass screen):
   Reanim8ed (Dasheles' loader), The Hat, The Masque, Transwarp (the fastest loader about), Wonderland XIV (40
   tracks), Mafio-DOS.
 - **The drive's CPU:** the 1541 Testsuite (r192), all 219 tests.
-- **The browser and its turbo,** loading PRGs and D64s from the card.
+- **The browser and its turbo,** loading PRGs (turbo) and D64s (the normal 1541 way) from the card.
 
 That is a sample, not every program. PicoD64 is checked against a real 1541 wherever we could, but **we can't
 be sure everything runs**: some loaders are famously picky, and there are thousands of titles.
@@ -216,6 +217,9 @@ real 1541 or another drive to hand, whether it works there helps a lot.
 - **Flash:** hold the Pico's BOOTSEL (in the case: press the pinhole marked ⤓ with a paperclip),
   plug in USB, and copy [**picod64.uf2**](https://github.com/bitbarista/picod64/releases/latest/download/picod64.uf2) (click to download; it's also [`firmware/picod64.uf2`](firmware/picod64.uf2)) onto
   the **RP2350** drive that appears.
+- **Updating, once flashed:** copy the new `picod64.uf2` to the card's top folder and switch on. PicoD64
+  checks it, installs it (the OLED says *Updating, wait*, then *Updated*) and renames it
+  `picod64.uf2.done`. Don't switch off while it updates; if that ever happens, flash it with BOOTSEL as above.
 - **SD card:** any size, formatted FAT32 or exFAT. Put your disk images (`.d64`) and programs
   (`.prg`) on it, in folders if you like.
 - **The 1541 DOS ROM.** PicoD64's emulated 1541 runs the drive's own operating system, so it needs a
@@ -255,9 +259,8 @@ real 1541 or another drive to hand, whether it works there helps a lot.
     on the card renamed **`chargen.bin`**. The scripts don't add it. If both files are there, this one wins.
 - **Optional, for JiffyDOS owners:** if your C64 has the JiffyDOS KERNAL and you own the JiffyDOS
   1541 ROM, put that ROM (16,384 bytes) on the card as `dos1541.bin` instead. Mounted D64s then
-  load at JiffyDOS speed: a 25 KB file took 11 s instead of 62 s on the PC test setup, every byte
-  checked. **Not yet confirmed on a board,** and its timing is tight, so check a program you know
-  before trusting it. Not included, because JiffyDOS is a commercial product.
+  load at JiffyDOS speed: on a real C64, a 154-block file took 18-20 s instead of about 100 s, every
+  byte checked ([Compatibility](#compatibility)). Not included, because JiffyDOS is a commercial product.
 
 ### Building from source
 

@@ -59,5 +59,19 @@ if [ -f "$ROM" ]; then
 else
   echo "f4b     SKIPPED: no DOS ROM at $ROM"; fail=1
 fi
+# D64 error bytes: the DOS reads a disk with errors built in, a whole track with no SYNC among them (its wait for
+# a SYNC there reads PB for 20 ms at a time: core/drive1541.h head_sync_to_pb's short cut), through both models
+if [ -f "$ROM" ]; then
+  gcc -O2 -Wall -Wextra -Wno-unused-function -DREF -o errb_ref errbytes_test.c
+  gcc -O2 -Wall -Wextra -Wno-unused-function       -o errb errbytes_test.c
+  timeout 300 ./errb_ref "$ROM" | grep '^T' > /tmp/ff_eq_ref.$$ || true
+  timeout 300 ./errb     "$ROM" > /tmp/ff_eq_all.$$ || true; grep '^T' /tmp/ff_eq_all.$$ > /tmp/ff_eq_new.$$ || true
+  if cmp -s /tmp/ff_eq_ref.$$ /tmp/ff_eq_new.$$ && grep -q "PASS  683 sectors read by the DOS, 0 wrong" /tmp/ff_eq_all.$$; then
+    printf "%-7s IDENTICAL, 683 sectors of a disk with error bytes (a track with no SYNC), by the real DOS\n" errb
+  else
+    printf "%-7s DIVERGES or fails\n" errb; diff /tmp/ff_eq_ref.$$ /tmp/ff_eq_new.$$ | head -4; fail=1
+  fi
+  rm -f errb errb_ref /tmp/ff_eq_all.$$
+fi
 rm -f /tmp/ff_eq_ref.$$ /tmp/ff_eq_new.$$ /tmp/ff_eq_laf.$$ /tmp/ff_eq_eag.$$
 exit $fail

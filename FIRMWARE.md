@@ -57,7 +57,9 @@ then the emulated 1541 takes over.
 **Back to browsing:** `CD_`, `CD:_` or `CD//` on the command channel while a disk is mounted. A passive copy of the
 IEC receiver watches the emulated drive's own view of the bus for them (the *sniffer*). The knob can also eject.
 
-**C64 reset.** A disk put in by the knob stays in, as with a real 1541; the drive restarts with it. A disk put in by
+**C64 reset.** As on a real 1541, whose RESET comes from the cable, the whole board restarts: what the drive wrote
+goes to the card first, then both cores start again (ready in about 0.9 s; a C64 takes 2–3 s to READY). A disk put
+in by the knob stays in, as with a real 1541, and goes back in once the board is up. A disk put in by
 the browser (Run first, a program from inside a D64) comes out, and browse mode goes to the card's root, so
 `LOAD"*",8` after a reset is always the browser. The reset's falling edge is latched in hardware, so a short pulse is
 never missed.
@@ -68,9 +70,17 @@ The emulated 1541 performs every bus cycle of a real one, in order, dummy cycles
 and waits for its exact cycle only where the outside world can see it: every VIA1 (IEC) read and write. Between
 those it has no inputs, so running ahead changes nothing it does.
 
-- **Writes** do their work up to 6 µs early, and only the pins wait for the cycle (aimed 0.6 µs before it, which
-  matched a 1541 best). Fast loaders leave little room: The Hat's loader reads the bus 13.19 µs after its ATN edge,
-  and a real 1541 answers by 13.0.
+- **Writes** do their work up to 6 µs early, and only the pins wait for the cycle: they change 0.3 µs after it.
+  Fast loaders leave little room: The Hat's loader reads the bus 13.19 µs after its ATN edge, and a real 1541
+  answers by 13.0.
+- **Releases lead pulls.** The output transistors (Q1/Q2, 2N3904) let go of a line later than they pull it: on the
+  board, serial `O` measures a release reaching the C64 228–242 ns after a pull would (10 runs). A write's releases
+  go 0.14 µs before its pulls, so a release reaches the C64 about 0.1 µs after a pull of the same write, the order a
+  1541 gives (the Ultimate's 1541: 0.07 µs). The ATN acknowledge (a PIO state machine, below) can't be moved earlier.
+- **How these were set.** No published measurement of a real 1541's edges against its cycles was found, and there is
+  no real 1541 here to measure. The two figures are the setting that ran every title in
+  [`docs/COMPAT-TESTS.md`](docs/COMPAT-TESTS.md) on this board. Others tried broke a title each (Coma Light 13 with
+  releases 0.23 µs early, Dutch Breeze with the pins at 0.17 µs). Serial `+`/`-` and `}`/`{` change them for a test.
 - **The lazy disk.** While the drive can't see the disk byte by byte (VIA2's CA1 interrupt off, not writing), the
   head's events are not scheduled; they are caught up, exactly, before anything looks: a VIA2 access, or an
   instruction that reads the V flag (SO). Idle work runs only when there is time to spare before the next IEC access.
@@ -96,8 +106,12 @@ on the read, so PAL and NTSC both fit. ATN is not used, so another drive on the 
 ends each file; on a wrong one, or a file that would overwrite the browser's code or the I/O area, the browser falls
 back to a plain LOAD.
 
+The turbo is for PRG files on the card only. A program inside a D64 (RETURN on it, or Run first) loads the plain
+1541 way: the disk goes in and the browser types the LOAD, so the drive reads the disk itself, as a real one does
+(some loaders read through the DOS straight after and need the drive to know the disk).
+
 The menu (F1): for a program, **Run**, **Load**, **Run slow** (no turbo); for a D64, **Open**, **Run first** (its
-first program, over the turbo), **Insert** (to BASIC).
+first program, the plain way), **Insert** (to BASIC).
 
 Channel-15 commands ([`core/browse.h`](core/browse.h)):
 
@@ -108,7 +122,7 @@ Channel-15 commands ([`core/browse.h`](core/browse.h)):
 | `XI:hhhh` | Name the D64 that `XM` reads, without mounting it (Run first); it is mounted after the transfer |
 | `XA:hhhh` | Point `LOAD"#"` at entry hhhh: a plain LOAD of a long name |
 | `XL:#hhhh` / `XL:name` | Prepare a card file for the turbo |
-| `XM:name` / `XM:*` | Prepare a file from the D64 last named or mounted |
+| `XM:name` / `XM:*` | Refused (`62, FILE NOT FOUND`): a file inside a D64 loads the plain way |
 | `XB` / `XG` / `XC` | Prepare the browser for the bootstrap / start the transfer / cancel |
 | `XR` / `XS:t` | Read / write `/.picod64.cfg`: turbo, sound, folder and position |
 | `XN` | Put in the next disk of the set (as the knob's long press); the DOS itself answers with a syntax error |
@@ -142,6 +156,9 @@ and the same five as PRGs. RUN prints `FILL TEST FILE n: OK, $count`, or `BAD AT
 | `S` | The bus sniffer ([`fw/iec_sniff.pio`](fw/iec_sniff.pio)): every ATN edge, sampled just before and 13 µs after |
 | `p` | Timing profile (`DIAG=1` builds) |
 | `L` / `l` | Logic analyser on the IEC pins: arm / print |
+| `+` / `-`, `}` / `{` | Pins later / earlier (5 sysclk); releases earlier / later than pulls (7 sysclk). Not saved |
+| `O` | Line timing: how much later a release reaches the C64 than a pull, with [`fw/linetime/linetime.prg`](fw/linetime/linetime.prg) running on it (no disk in, nothing else on the bus; about 10 s) |
+| `A` / `a` | Answer watch: each answer's margin before the C64's read, from our outputs / from the bus lines; a key stops it |
 | `B` | Restart into BOOTSEL |
 
 [`host/hw_sniff.py`](host/hw_sniff.py) records a loader through the sniffer, and [`host/sniff_cmp.py`](host/sniff_cmp.py) / `sniff_pauses.py` compare two
@@ -153,11 +170,16 @@ On a real PAL C64 at the stock 150 MHz, each from a powered-up C64, to its end: 
 Disgrace, Uncensored, Lunatico, Shards of Fancy, MATH, Memento Mori, Primitive 7 Sins, Reanim8ed, The Hat, The
 Masque, Transwarp, Wonderland XIV (40 tracks) and Mafio-DOS; the 1541 Testsuite (all 219 tests); the stock DOS
 (directory, LOAD, SAVE back to a D64 and to the card); the browser and its turbo. The list, with each title's loader:
-[`docs/COMPAT-TESTS.md`](docs/COMPAT-TESTS.md). JiffyDOS (KERNAL, and KERNAL plus drive ROM) and FB64 work on the
-host twin; neither is confirmed on a board yet.
+[`docs/COMPAT-TESTS.md`](docs/COMPAT-TESTS.md). JiffyDOS (KERNAL, and KERNAL plus drive ROM) works on
+a real C64, every byte checked. FB64 works on the host twin; not confirmed on a board yet.
 
 ## Known issues
 
+- **The Hat**: disk 1 crashed in its loader 7 times in about 80 unattended runs at this firmware's bus timing (on a
+  test build with the same timing). Other timings tried each broke another demo.
+- **Transwarp v0.86, Menu entry 1**: now and then the C64 crashes during or after the load (a garbled BASIC
+  error, or a yellow screen), with the drive's timing clean: 2 of 13 runs on v0.2, 1 of 14 on v0.1.
+- **Dutch Breeze** crashes on disk 1, on v0.1 too (v0.2 0 of 1, v0.1 1 of 2).
 - A first load very occasionally fails with `23,READ ERROR` (about once in 60 runs of Transwarp's loader).
   Cause not found.
 - During a disk change, the drive's reads were measured 12–39 µs late (its no-disk tables are read from flash then).

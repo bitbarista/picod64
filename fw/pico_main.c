@@ -24,10 +24,13 @@
 #include "hardware/pwm.h"
 #include "hardware/irq.h"
 #include "hardware/dma.h"
+#include "hardware/watchdog.h"
+#include "hardware/structs/psm.h"
 #include "atn_gate.pio.h"
 #include "iec_sniff.pio.h"
 
 #include "sound.h"
+#include "linetime.h"
 
 /* --- pins (hardware/gen/gen_sch.py, AUDIT A2) -------------------------------- */
 #define PIN_TX 0
@@ -79,7 +82,10 @@ static volatile int32_t wr_head = 6 * SYS_MHZ;   /* sysclk (6 us): a VIA1 write'
  * Reanim8ed's loader (the C64 samples bit pairs at fixed cycles after its ATN edge, a window under 1 us wide), the
  * bus from the C64's ATN edge to each bit pair, middle 96%: the Ultimate's 1541 pulls 6.50-13.25 us, releases
  * 6.57-13.33; PicoD64 at -0.1 6.14-12.77 / 6.37-13.03 (the demo stalled or crashed at random); at +0.3 with releases
- * 0.14 us early (rel_lead) 6.58-13.13 / 6.68-13.33, and it runs both sides to its end */
+ * 0.14 us early (rel_lead) 6.58-13.13 / 6.68-13.33, and it runs both sides to its end (one run, the Ultimate's lead in).
+ * Kept at +0.3 (2026-11-22): its loop crashes The Hat 7 runs in 80; 25 sysclk with releases 35 early passed The Hat
+ * 35 of 35 (not significant against 7 of 80: Fisher p = 0.07) but crashed Coma Light 13 2 of 2, and 25 with releases 21
+ * crashed Dutch Breeze 1 of 1 (hardware/IEC-TIMING-DECISION.md) */
 static volatile int32_t wr_trim = 3 * (SYS_MHZ / 10);
 /* A line PicoD64 releases is seen high ~0.4 us after its pin changes (the transistor letting go, the pull-up's rise);
  * one it pulls is seen low within ~0.16 us (logic analyser, Mafio-DOS, 2026-11-09). A 1541's 7406 switches both fast.
@@ -93,7 +99,8 @@ static volatile int32_t wr_trim = 3 * (SYS_MHZ / 10);
  * demo crashed later, at random. With 0 it runs to its turn-disk screen, and Mafio-DOS (fixed meanwhile by the pin
  * timing, 98e7315) still loads its menu. Kept as a serial knob (} {, 0.05 us).
  * 0.14 us since 2026-11-13 (with the pins at +0.3, above): a release then lands on the bus ~0.1 us AFTER a pull of the
- * same write, as the Ultimate's 1541 gives (0.07), where at 0 it came 0.25 after */
+ * same write, as the Ultimate's 1541 gives (0.07), where at 0 it came 0.25 after (serial O on the board, 2026-11-22:
+ * the release lag is CLK 228-242 ns, DATA 232-238; 35 sysclk early, within -5..+9 ns of the pull, crashed Coma Light 13) */
 static volatile int32_t rel_lead = 3 * (SYS_MHZ / 20);
 /* sysclk: a VIA1 read samples the pins this long after its cycle's deadline (serial ] [, 0.1 us). A 6502 takes its read
  * data at the end of the cycle; Transwarp's upload (the C64 clocks 2-bit pairs at fixed cycles, the drive reads them at
@@ -220,6 +227,13 @@ static inline void plat_resync(uint32_t c) { last_c = c; deadline = DWT_CYCCNT +
 #define LOG_N 1024   /* (2048 until 2026-11-14: 4 KB for the disk's look-ahead and the skips; 1024 changes are ~50 ms of the slow
                      * standard protocol the sniffer looks at, still twice core 0's longest stall) */
 static volatile uint32_t log_buf[LOG_N], log_w;
+#ifndef TRACE
+#define TRACE 0   /* TRACE=1 (bash fw/build.sh with TRACE=1 RAM_FLOOR=1000): a diagnostic build, the drive's ATN gate (what it pulls)
+                   * beside each line change in the ring, serial G (all of it) and D (2026-11-18, The Hat's loader hangs) */
+#endif
+#if TRACE
+static uint8_t tr_gate[LOG_N];
+#endif
 static uint8_t log_last = 0xFF;
 static inline uint8_t pins_in(void) { return (uint8_t)((~sio_hw->gpio_in >> PIN_ATN_IN) & 7); }
 /* CLK_OUT (GP16) from the SIO; DATA_OUT (GP17) from the ATN gate's PIO state machine:
@@ -259,7 +273,13 @@ static inline uint8_t plat_iec_in(void)
 {
     if (bus_replaying) return (uint8_t)(bus_replay_lines | bus_gate_pulls(bus_replay_lines & IEC_ATN));
     uint8_t l = pins_in();
-    if (l != log_last) { log_last = l; log_buf[log_w & (LOG_N - 1)] = (D.cycles << 3) | l; log_w++; }
+    if (l != log_last) {
+        log_last = l; log_buf[log_w & (LOG_N - 1)] = (D.cycles << 3) | l;
+#if TRACE
+        tr_gate[log_w & (LOG_N - 1)] = D.gate;
+#endif
+        log_w++;
+    }
     return l;
 }
 static inline void plat_iec_out(uint8_t p) { bus_drive_pulls = p; }   /* the pins follow the gate, below */
@@ -356,6 +376,10 @@ static void st_flush_(void) { request(RQ_FLUSH, 0, 0, 0, 0, 0, 0); }
  * C64 missed a bit; IECD_HOLD_US 70 -> 80 cured it (5,723 bytes, none lost). Serial 's' */
 static uint32_t tx_err_n, tx_err_wait, tx_err_bytes; static uint8_t tx_err_lines;
 #define BUS_TX_ERR() do { tx_err_n++; tx_err_wait = B.dev.now - B.dev.tt; tx_err_lines = B.dev.in; tx_err_bytes = B.dev.bytes_out; } while (0)
+/* A C64 reset restarts the whole board (fw/bus.h bus_check_reset): core 1 lets go of the bus and parks, core 0
+ * writes back what the drive wrote, keeps the knob's disk in RAM that survives the restart, and restarts */
+static volatile int reboot_req, reboot_parked; static uint32_t ready_ms;   /* (serial s: the boot's length) */
+#define BUS_REBOOT_ON_RESET() (bus_out(0), reboot_req = 1, 1)
 #include "bus.h"
 /* before core 1 waits on the card: browse mode's pulls (the frame acknowledge,
  * DATA low = busy) on the pins now, not after iec_poll returns */
@@ -381,6 +405,7 @@ static void device_save(int dev)
     flash_range_program(DEV_OFFSET, page, FLASH_PAGE_SIZE);
     restore_interrupts(irq);
 }
+
 static uint8_t dos_rom[16384];
 static volatile int core1_up;
 #define TRACK_SETTLE_MS 8
@@ -441,6 +466,7 @@ static void __not_in_flash_func(core1_main)(void)
     for (;;) {
         if (bench_req && !B.online) { bench_run(bench_req); bench_req = 0; }
         if (bus_off && !B.online) { clk_set(0); gate_set(0); while (bus_off) { } continue; }
+        if (reboot_req) { clk_set(0); gate_set(0); reboot_parked = 1; for (;;) { } }   /* core 0 restarts us */
         bus_poll();
     }
     restore_interrupts(irq);
@@ -450,6 +476,7 @@ static void __not_in_flash_func(core1_main)(void)
 #include "storage.h"
 #include "svc.h"
 #include "ui.h"
+#include "update.h"
 uint8_t sd_spi_xfer(uint8_t out) { uint8_t in; spi_write_read_blocking(spi1, &out, &in, 1); return in; }
 void sd_spi_cs(int low) { gpio_put(PIN_SD_CS, !low); }
 void sd_spi_speed(int f) { spi_set_baudrate(spi1, f ? 25000000 : 400000); }
@@ -622,14 +649,21 @@ static int bl_on; static uint32_t bl_n, bl_last;
  * read is the next edge less that. margin = read - answer: below 0 the C64 read the bits before the drive set them.
  * Statistics only (no storage), so it can watch a whole demo; card requests are still served between polls. A key
  * stops it. */
-static void lat_watch(void)
+static void lat_watch(int lines)
 {
-    const uint32_t ATN = 1u << PIN_ATN_IN, OUTS = 3u << PIN_CLK_OUT, US = SYS_MHZ, RD = 4060u * SYS_MHZ / 1000u;
+    /* lines (serial a, 2026-11-18): the answer is a change of CLK or DATA on the bus, not on our outputs, so the same rule
+     * times any drive: PicoD64, or with it off the bus (X) another drive on the cable */
+    const uint32_t ATN = 1u << PIN_ATN_IN, OUTS = lines ? 6u << PIN_ATN_IN : 3u << PIN_CLK_OUT, US = SYS_MHZ, RD = 4060u * SYS_MHZ / 1000u;
     DEMCR |= 1u << 24; DWT_CTRL |= 1;
     uint32_t hist[16] = {0}, n = 0, skipped = 0, worst_n = 0; int32_t mmin = INT32_MAX;
-    struct { int32_t m, ans; uint32_t ms; uint16_t pc; uint8_t ht, rise; } w[8];
+    struct { int32_t m, ans; uint32_t ms; uint16_t pc; uint8_t ht, rise, kind; } w[8];
     uint32_t v = sio_hw->gpio_in, t_edge = 0, t_ans = 0, ms0 = sd_ms(); int have_edge = 0, rise = 0;
-    printf("answer watch: a key stops it\n");
+    /* G3 (2026-11-21, hardware/IEC-TIMING-DECISION.md): which edge each answer was. kind: bit 0 CLK changed, 1 CLK went
+     * high, 2 DATA changed, 3 DATA went high (on the bus lines: high = released; from our outputs: high = pulled). Late
+     * answers (margin < 0) and near ones (< 0.5 us) are counted per line and direction */
+    const uint32_t C_B = lines ? 1u << (PIN_ATN_IN + 1) : 1u << PIN_CLK_OUT, D_B = lines ? 1u << (PIN_ATN_IN + 2) : 1u << PIN_DATA_OUT;
+    uint8_t ans_kind = 0; uint32_t late_k[4] = {0}, near_k[4] = {0};   /* [line*2 + released]: 0 CLK pull 1 CLK release 2 DATA pull 3 DATA release */
+    printf("answer watch (%s): a key stops it\n", lines ? "from the bus lines" : "from our outputs");
     for (;;) {
         uint32_t t_slice = DWT_CYCCNT;
         while (DWT_CYCCNT - t_slice < 2000u * US) {           /* 2 ms of polling, then the card and the keys */
@@ -643,11 +677,18 @@ static void lat_watch(void)
                     if (m < mmin) mmin = m;
                     int k = worst_n < 8 ? (int)worst_n++ : -1;
                     if (k < 0) { k = 0; for (int i = 1; i < 8; i++) if (w[i].m > w[k].m) k = i; if (w[k].m <= m) k = -1; }
-                    if (k >= 0) { w[k].m = m; w[k].ans = (int32_t)(t_ans - t_edge); w[k].ms = sd_ms() - ms0; w[k].pc = CPU.pc; w[k].ht = D.ht; w[k].rise = (uint8_t)rise; }
+                    if (k >= 0) { w[k].m = m; w[k].ans = (int32_t)(t_ans - t_edge); w[k].ms = sd_ms() - ms0; w[k].pc = CPU.pc; w[k].ht = D.ht; w[k].rise = (uint8_t)rise; w[k].kind = ans_kind; }
+                    if (m < (int32_t)US / 2) for (int l = 0; l < 2; l++) if (ans_kind & (1u << (2 * l))) {
+                        int rel = ((ans_kind >> (2 * l + 1)) & 1) == (lines ? 1 : 0);
+                        near_k[l * 2 + rel]++; if (m < 0) late_k[l * 2 + rel]++;
+                    }
                 }
                 have_edge = 1; t_edge = t; t_ans = 0; rise = (nv & ATN) != 0;   /* pin high: ATN released */
             }
-            if (((nv ^ v) & OUTS) && have_edge && t - t_edge > US) t_ans = t;
+            if (((nv ^ v) & OUTS) && have_edge && t - t_edge > US) {
+                t_ans = t; uint32_t d = nv ^ v;
+                ans_kind = (uint8_t)(((d & C_B) ? 1u | ((nv & C_B) ? 2u : 0u) : 0u) | ((d & D_B) ? 4u | ((nv & D_B) ? 8u : 0u) : 0u));
+            }
             v = nv;
         }
         have_edge = 0; skipped++;                              /* (an edge during the pause isn't measured) */
@@ -657,9 +698,200 @@ static void lat_watch(void)
     printf("answer watch: %lu answers in %lu s; margin before the C64's read (read = next ATN edge - 4.06 us): min %ld.%02ld us\n",
            (unsigned long)n, (unsigned long)((sd_ms() - ms0) / 1000), (long)(mmin / (int32_t)US), (long)((mmin < 0 ? -mmin : mmin) % US * 100 / US));
     printf("  margin, us:"); for (int i = 0; i < 16; i++) printf(" %s%d:%lu", i == 0 ? "<" : i == 15 ? ">=" : "", i == 15 ? 13 : i - 2, (unsigned long)hist[i]); printf("\n");
-    for (uint32_t i = 0; i < worst_n; i++)
-        printf("  worst: margin %ld ns, answer %ld ns after the ATN %s, at %lu ms, drive PC $%04X, half-track %u\n", (long)(w[i].m * 1000 / (int32_t)US),
-               (long)(w[i].ans * 1000 / (int32_t)US), w[i].rise ? "release" : "pull", (unsigned long)w[i].ms, w[i].pc, w[i].ht);
+    printf("  answers with margin < 0 by edge: CLK pull %lu, CLK release %lu, DATA pull %lu, DATA release %lu; < 0.5 us: %lu, %lu, %lu, %lu\n",
+           (unsigned long)late_k[0], (unsigned long)late_k[1], (unsigned long)late_k[2], (unsigned long)late_k[3],
+           (unsigned long)near_k[0], (unsigned long)near_k[1], (unsigned long)near_k[2], (unsigned long)near_k[3]);
+    for (uint32_t i = 0; i < worst_n; i++) {
+        static const char *const ed[4] = { "pull", "release", "pull", "release" };
+        char kb[40]; int o = 0; kb[0] = 0;
+        for (int l = 0; l < 2; l++) if (w[i].kind & (1u << (2 * l)))
+            o += snprintf(kb + o, sizeof kb - (size_t)o, "%s%s %s", o ? " + " : "", l ? "DATA" : "CLK", ed[l * 2 + ((((w[i].kind >> (2 * l + 1)) & 1) == (lines ? 1 : 0)) ? 1 : 0)]);
+        printf("  worst: margin %ld ns, answer %ld ns after the ATN %s, at %lu ms, drive PC $%04X, half-track %u; edge %s\n", (long)(w[i].m * 1000 / (int32_t)US),
+               (long)(w[i].ans * 1000 / (int32_t)US), w[i].rise ? "release" : "pull", (unsigned long)w[i].ms, w[i].pc, w[i].ht, o ? kb : "?");
+    }
+}
+/* The edge watch (serial e, 2026-11-19): for each change of our CLK or DATA output, the time until the bus line, as
+ * our input sees it, follows: a release is the transistor letting go and the pull-ups' rise, a pull its turning on.
+ * A release the C64 is still holding (over 5 us) isn't counted, nor a change with the line already there. Statistics
+ * only, like the answer watch (a key stops it), so it can run through a whole load, cold or warm. Our input reads high
+ * at about 3.5 V on the bus (the 6k8/10k divider), later than a CIA's ~2 V, so the release times are a bound */
+/* (2026-11-19, first run: every pull and release read 426-500 ns, the loop's own time from flash, so the polling is a
+ * RAM function that only records; edge_watch adds the records up between slices) */
+#define EW_HELD 0xFFFFu
+static int __not_in_flash_func(edge_slice)(uint32_t *vp, uint16_t *rec, int max, uint32_t dur)
+{
+    const uint32_t MASK = (3u << PIN_CLK_OUT) | (3u << (PIN_ATN_IN + 1)), US = SYS_MHZ;
+    uint32_t v = *vp, t_start = DWT_CYCCNT, t0[2] = {0, 0}; int pend[2] = {-1, -1}, n = 0;   /* pend: the change waited for */
+    while (n < max) {
+        uint32_t nv, t;
+        do { nv = sio_hw->gpio_in & MASK; t = DWT_CYCCNT; } while (nv == v && t - t_start < dur);
+        if (nv == v) break;
+        for (int l = 0; l < 2; l++) {
+            const uint32_t O = 1u << (PIN_CLK_OUT + l), I = 1u << (PIN_ATN_IN + 1 + l);
+            if ((nv ^ v) & O) {                              /* our output changed: pull (pin high) or release */
+                int k = (nv & O) ? 0 : 1;
+                pend[l] = ((nv & I) != 0) == (k == 0) ? k : -1;   /* the line not already where it's going */
+                t0[l] = t;
+            } else if (pend[l] >= 0 && ((nv ^ v) & I) && ((nv & I) != 0) == (pend[l] == 1)) {
+                uint32_t d = t - t0[l]; int k = pend[l]; pend[l] = -1;
+                rec[n++] = (k == 1 && d > 5u * US) ? EW_HELD : (uint16_t)(l << 15 | k << 14 | (d > 0x3FFFu ? 0x3FFFu : d));
+            }
+        }
+        v = nv;
+    }
+    *vp = v; return n;
+}
+/* The pulse test (serial f, 2026-11-19, the edge watch's 460 ns floor): with the bus idle (the C64 at READY, the drive
+ * not writing), interrupts off, CLK pulled and released 100 times from core 0, each timed to our input following; also
+ * our own output pin's read-back and the polling loop's speed. r: [i][0 out read-back, 1 pull, 2 release] in sysclk */
+static uint16_t pt_t[4][8]; static uint8_t pt_v[4][8], pt_n[4];
+static void __not_in_flash_func(pulse_run)(uint16_t r[][3], int n, uint32_t *iters, int l)
+{
+    const uint32_t O = 1u << (PIN_CLK_OUT + l), I = 1u << (PIN_ATN_IN + 1 + l), TO = 10u * SYS_MHZ, GAP = 20u * SYS_MHZ;
+    uint32_t t0 = DWT_CYCCNT, k = 0;
+    while (DWT_CYCCNT - t0 < SYS_MHZ) { (void)sio_hw->gpio_in; k++; }   /* 1 us of the polling's own loop */
+    *iters = k;
+    for (int i = 0; i < n; i++) {
+        uint32_t t;
+        t0 = DWT_CYCCNT; if (l) gate_set(1u); else sio_hw->gpio_set = O;   /* DATA: the gate's "pull while ATN released" */
+        while (!(sio_hw->gpio_in & O) && DWT_CYCCNT - t0 < TO) { } { uint32_t rb = DWT_CYCCNT - t0; r[i][0] = (uint16_t)(rb > 255 ? 255 : rb); }
+        while ((sio_hw->gpio_in & I) && DWT_CYCCNT - t0 < TO) { } r[i][1] = (uint16_t)(DWT_CYCCNT - t0);
+        t = DWT_CYCCNT; while (DWT_CYCCNT - t < GAP) { }
+        t0 = DWT_CYCCNT; if (l) gate_set(0u); else sio_hw->gpio_clr = O;
+        while ((sio_hw->gpio_in & O) && DWT_CYCCNT - t0 < TO) { } { uint32_t rb = DWT_CYCCNT - t0; r[i][0] |= (uint16_t)((rb > 255 ? 255 : rb) << 8); }   /* our pin read back released, high byte */
+        while (!(sio_hw->gpio_in & I) && DWT_CYCCNT - t0 < TO) { } r[i][2] = (uint16_t)(DWT_CYCCNT - t0);
+        t = DWT_CYCCNT; while (DWT_CYCCNT - t < GAP) { }
+    }
+    /* then 4 more releases, each traced: every change of our pin and the line for 2 us after it (pt_t/pt_v) */
+    for (int j = 0; j < 4; j++) {
+        uint32_t t;
+        if (l) gate_set(1u); else sio_hw->gpio_set = O;
+        t = DWT_CYCCNT; while (DWT_CYCCNT - t < GAP) { }
+        uint32_t v = sio_hw->gpio_in & (O | I); int m = 0;
+        t0 = DWT_CYCCNT; if (l) gate_set(0u); else sio_hw->gpio_clr = O;
+        pt_t[j][m] = 0; pt_v[j][m++] = (uint8_t)((v & O ? 1 : 0) | (v & I ? 2 : 0));
+        while (DWT_CYCCNT - t0 < 2u * SYS_MHZ && m < 8) {
+            uint32_t nv = sio_hw->gpio_in & (O | I);
+            if (nv != v) { pt_t[j][m] = (uint16_t)(DWT_CYCCNT - t0); pt_v[j][m++] = (uint8_t)((nv & O ? 1 : 0) | (nv & I ? 2 : 0)); v = nv; }
+        }
+        pt_n[j] = (uint8_t)m;
+        t = DWT_CYCCNT; while (DWT_CYCCNT - t < GAP) { }
+    }
+}
+static void pulse_test(void)
+{
+    uint16_t r[100][3]; uint32_t it;                 /* (on the stack: 600 bytes, no RAM to spare) */
+    DEMCR |= 1u << 24; DWT_CTRL |= 1;
+    for (int l = 0; l < 2; l++) {
+        const char *nm = l ? "DATA" : "CLK";
+        if (!(sio_hw->gpio_in & (1u << (PIN_ATN_IN + 1 + l))) || (sio_hw->gpio_in & (1u << (PIN_CLK_OUT + l)))) { printf("pulse test %s: not idle (held low, or ours pulled)\n", nm); continue; }
+        uint32_t irq = save_and_disable_interrupts();
+        pulse_run(r, 100, &it, l);
+        restore_interrupts(irq);
+        printf("pulse test %s: polling loop %lu reads per us; ns (pull: our pin / line seen; release: our pin / line seen):\n", nm, (unsigned long)it);
+        for (int i = 0; i < 100; i++) printf("%lu/%lu %lu/%lu%s", (unsigned long)((r[i][0] & 255) * 1000u / SYS_MHZ), (unsigned long)(r[i][1] * 1000u / SYS_MHZ), (unsigned long)((r[i][0] >> 8) * 1000u / SYS_MHZ), (unsigned long)(r[i][2] * 1000u / SYS_MHZ), i % 10 == 9 ? "\n" : " ");
+        printf("  traced releases (ns:state, state = our pin pulling 1 + line released 2):\n");
+        for (int j = 0; j < 4; j++) { printf("  "); for (int m = 0; m < pt_n[j]; m++) printf(" %lu:%u", (unsigned long)(pt_t[j][m] * 1000u / SYS_MHZ), pt_v[j][m]); printf("\n"); }
+    }
+}
+/* Line timing (serial O, 2026-11-19; fw/linetime.h): our pulls and releases as a real C64 reads them, with
+ * fw/linetime/linetime.prg running on it. Core 1 is parked (bus off); core 0 runs each trial with interrupts off.
+ * l: 0 CLK (the C64's trigger is DATA), 1 DATA (trigger CLK) */
+static inline void lt_out(int l, int pull)
+{
+    if (l) gate_set(pull ? 1u : 0u);                 /* (the gate's "pull while ATN released": ATN stays released) */
+    else if (pull) sio_hw->gpio_set = 1u << PIN_CLK_OUT; else sio_hw->gpio_clr = 1u << PIN_CLK_OUT;
+}
+static int __not_in_flash_func(lt_trial_pins)(int l, int pull, uint32_t d)
+{
+    const uint32_t TRIG = 1u << (PIN_ATN_IN + (l ? 1 : 2)), US = SYS_MHZ;
+    uint32_t t0 = DWT_CYCCNT, te;
+    while (!(sio_hw->gpio_in & TRIG)) if (DWT_CYCCNT - t0 > 5000u * US) return -1;   /* released first */
+    while (sio_hw->gpio_in & TRIG) if (DWT_CYCCNT - t0 > 5000u * US) return -1;      /* the C64's pull */
+    te = DWT_CYCCNT;
+    while (DWT_CYCCNT - te < d) { }
+    lt_out(l, pull);
+    while (!(sio_hw->gpio_in & TRIG) && DWT_CYCCNT - te < 300u * US) { }          /* its answer: let go at ~19 us seen, ~125 not */
+    uint32_t dt = DWT_CYCCNT - te;
+    lt_out(l, !pull);                                /* set up again */
+    return dt < 50u * US;
+}
+static int lt_trial(int l, int pull, uint32_t d)
+{
+    uint32_t irq = save_and_disable_interrupts();
+    int r = lt_trial_pins(l, pull, d);
+    restore_interrupts(irq);
+    return r;
+}
+static void line_timing(void)
+{
+    if (B.online) { printf("line timing: eject first\n"); return; }
+    int was_off = bus_off; bus_off = 1; sleep_ms(2);   /* core 1 lets go and parks */
+    DEMCR |= 1u << 24; DWT_CTRL |= 1;
+    const uint32_t BOTH = 3u << (PIN_ATN_IN + 1);
+    int there = 0;
+    printf("line timing: waiting up to 60 s for LINETIME on the C64 (a key stops it)\n");
+    for (int t = 0; t < 600 && !there; t++) {        /* hello: CLK and DATA pulled 10 ms, then a trial within 90 ms */
+        lt_out(0, 1); lt_out(1, 1);
+        for (uint32_t m = sd_ms(); sd_ms() - m < 10; ) serve();
+        lt_out(0, 0); lt_out(1, 0);
+        busy_wait_us(20);
+        for (uint32_t m = sd_ms(); sd_ms() - m < 90 && !there; ) { serve(); there = (sio_hw->gpio_in & BOTH) != BOTH; }
+        if (getchar_timeout_us(0) >= 0) break;
+    }
+    if (!there) { printf("line timing: no C64 program\n"); bus_off = was_off; return; }
+    lt_res_t r[2][2]; int ok = 1;
+    for (int l = 0; l < 2 && ok; l++) for (int p = 1; p >= 0 && ok; p--) {
+        lt_out(l, !p); busy_wait_us(20);
+        r[l][p] = lt_measure(lt_trial, l, p, SYS_MHZ);
+        lt_out(l, 0);
+        if (r[l][p].ok == 0) { printf("line timing: the C64 stopped\n"); ok = 0; }
+    }
+    lt_out(0, 1); lt_out(1, 1); sleep_ms(10); lt_out(0, 0); lt_out(1, 0);   /* done: the C64 returns to BASIC */
+    bus_off = was_off;
+    if (!ok) return;
+    printf("line timing: the C64 reads 4 cycles (4,060 ns PAL) after its pull; d50 = how long after seeing it we can\n"
+           "change the other line and still have half its reads see the change (fine steps %u ns, %d reads each)\n", 1000u / SYS_MHZ, LT_FINE_T);
+    for (int l = 0; l < 2; l++) {
+        const char *nm = l ? "DATA" : "CLK";
+        for (int p = 1; p >= 0; p--)
+            printf("  %s %s: d50 %ld ns, spread %ld ns, ends %u/%u%s\n", nm, p ? "pull   " : "release", (long)(r[l][p].d50x10 * 100 / (int32_t)SYS_MHZ),
+                   (long)(r[l][p].w * 1000 / (int32_t)SYS_MHZ), r[l][p].lo10, r[l][p].hi10, r[l][p].ok == 1 ? "" : "  (curve not 1 to 0: not trusted)");
+        printf("  %s: a release reaches the C64 %ld ns after a pull would\n", nm, (long)((r[l][1].d50x10 - r[l][0].d50x10) * 100 / (int32_t)SYS_MHZ));
+    }
+}
+static void edge_watch(void)
+{
+    const uint32_t US = SYS_MHZ;
+    DEMCR |= 1u << 24; DWT_CTRL |= 1;
+    struct { uint32_t n, sum, min, max, hist[16]; } s[2][2];   /* [line][0 pull, 1 release]; hist: 100 ns bins, last >= 1.5 us */
+    for (int l = 0; l < 2; l++) for (int k = 0; k < 2; k++) { s[l][k].n = s[l][k].sum = s[l][k].max = 0; s[l][k].min = UINT32_MAX; for (int i = 0; i < 16; i++) s[l][k].hist[i] = 0; }
+    uint32_t held = 0, ms0 = sd_ms(); uint16_t rec[128];
+    printf("edge watch (our CLK/DATA output to the bus line as seen): a key stops it\n");
+    uint32_t v = sio_hw->gpio_in & ((3u << PIN_CLK_OUT) | (3u << (PIN_ATN_IN + 1)));
+    for (;;) {
+        uint32_t t_slice = DWT_CYCCNT;
+        for (;;) {                                           /* 2 ms of polling (a full record buffer ends a call early) */
+            uint32_t el = DWT_CYCCNT - t_slice; if (el >= 2000u * US) break;
+            int n = edge_slice(&v, rec, 128, 2000u * US - el);
+            for (int i = 0; i < n; i++) {
+                if (rec[i] == EW_HELD) { held++; continue; }
+                int l = rec[i] >> 15, k = (rec[i] >> 14) & 1; uint32_t d = rec[i] & 0x3FFFu;
+                s[l][k].n++; s[l][k].sum += d; if (d < s[l][k].min) s[l][k].min = d; if (d > s[l][k].max) s[l][k].max = d;
+                uint32_t b = d * 10u / US; s[l][k].hist[b > 15 ? 15 : b]++;
+            }
+        }
+        serve();                                             /* (a change during the pause isn't measured: each call starts afresh) */
+        if (getchar_timeout_us(0) >= 0) break;
+    }
+    printf("edge watch: %lu s; releases held by the other side (over 5 us, not counted) %lu\n", (unsigned long)((sd_ms() - ms0) / 1000), (unsigned long)held);
+    for (int l = 0; l < 2; l++) for (int k = 0; k < 2; k++) {
+        if (!s[l][k].n) { printf("  %s %s: none\n", l ? "DATA" : "CLK", k ? "release" : "pull"); continue; }
+        printf("  %s %s: %lu, ns min %lu avg %lu max %lu; per 100 ns:", l ? "DATA" : "CLK", k ? "release" : "pull", (unsigned long)s[l][k].n,
+               (unsigned long)(s[l][k].min * 1000u / US), (unsigned long)((uint64_t)s[l][k].sum * 1000u / US / s[l][k].n), (unsigned long)(s[l][k].max * 1000u / US));
+        for (int i = 0; i < 16; i++) printf(" %lu", (unsigned long)s[l][k].hist[i]);
+        printf("\n");
+    }
 }
 static void la_capture(void)
 {
@@ -747,6 +979,110 @@ static int ui_sound(int toggle)
     return snd_on;
 }
 
+/* --- a firmware update from the card (fw/update.c) ------------------------------------------------------
+ * At power-on, before core 1 runs. The new image goes first to a staging area in the flash, well clear of the
+ * firmware and of the device number's sector, and is checked there. Only then is it copied over the firmware,
+ * by upd_commit, which runs from RAM and calls nothing in the flash (the flash it would run from is what it
+ * writes). Power lost during the copy leaves no firmware; the BOOTSEL button (the boot ROM) still loads one.
+ * A watchdog scratch register remembers which image was just copied: if that same image comes back as not
+ * yet installed, the copy failed, and it is not tried again (no endless restarts). */
+#define UPD_STAGE (2u * 1024 * 1024)
+_Static_assert(UPD_MAX <= UPD_STAGE && UPD_STAGE + UPD_MAX <= DEV_OFFSET, "staging area: clear of the firmware and the device number");
+#define UPD_TRIED 0x55504454u                        /* "UPDT" in scratch[0], the image's hash in scratch[1] */
+static int upd_stage_write(uint32_t off, const uint8_t *buf)
+{
+    uint32_t irq = save_and_disable_interrupts();
+    flash_range_erase(UPD_STAGE + off, UPD_SECTOR);
+    flash_range_program(UPD_STAGE + off, buf, UPD_SECTOR);
+    restore_interrupts(irq);
+    return 1;
+}
+static void __no_inline_not_in_flash_func(upd_commit)(uint32_t size)
+{
+    uint8_t *upd_buf = bus_gcr;                      /* (the disk's buffer: not in use before core 1 runs) */
+    save_and_disable_interrupts();
+    for (uint32_t off = 0; off < size; off += UPD_SECTOR) {
+        const volatile uint8_t *src = (const volatile uint8_t *)(XIP_BASE + UPD_STAGE + off);   /* (volatile: no memcpy, in the flash) */
+        for (int i = 0; i < UPD_SECTOR; i++) upd_buf[i] = src[i];
+        flash_range_erase(off, UPD_SECTOR);
+        flash_range_program(off, upd_buf, UPD_SECTOR);
+    }
+    hw_set_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_TRIGGER_BITS);   /* restart, into the new firmware */
+    for (;;) __asm volatile("nop");
+}
+static void upd_say(ui_t *ui, const char *m, int ms)
+{
+    strcpy(ui->msg, m); ui->msg_until = sd_ms() + (uint32_t)ms;
+    ui_draw(ui, sd_ms()); oled_show(ui);
+    printf("PicoD64: %s\n", m);
+}
+static void update_check(ui_t *ui)
+{
+    static const upd_io_t io = { (const uint8_t *)XIP_BASE, (const uint8_t *)(XIP_BASE + UPD_STAGE), upd_stage_write, bus_gcr };
+    char why[24]; uint32_t size;
+    int tried = watchdog_hw->scratch[0] == UPD_TRIED;
+    uint32_t tried_hash = watchdog_hw->scratch[1];
+    watchdog_hw->scratch[0] = 0;
+    int r = upd_check(&io, &size, why, sizeof why);
+    if (r == UPD_NONE) return;
+    if (r == UPD_SAME) { upd_say(ui, tried ? "Updated" : "Up to date", 3000); sleep_ms(3000); return; }
+    if (r == UPD_STAGED && tried && tried_hash == upd_hash) { r = UPD_BAD; strcpy(why, "Copy failed"); }
+    if (r == UPD_BAD) {
+        upd_say(ui, "Update failed", 2000); sleep_ms(2000);
+        upd_say(ui, why, 3000); sleep_ms(3000);
+        return;
+    }
+    upd_say(ui, "Updating, wait", 60000);
+    sleep_ms(50);                                    /* (the display's last bytes out) */
+    watchdog_hw->scratch[1] = upd_hash; watchdog_hw->scratch[0] = UPD_TRIED;
+    watchdog_hw->scratch[4] = 0;                     /* a plain restart, not into a given address */
+    hw_clear_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
+    hw_set_bits(&psm_hw->wdsel, PSM_WDSEL_BITS & ~(PSM_WDSEL_ROSC_BITS | PSM_WDSEL_XOSC_BITS));   /* as the SDK's watchdog_reboot */
+    upd_commit(size);
+}
+
+/* --- a C64 reset: the whole board restarts ----------------------------------------- */
+/* The knob's disk survives it here: RAM the C runtime doesn't clear, and a restart doesn't either */
+#define KEEP_MAGIC 0x4B4E4F42u                       /* "KNOB" */
+typedef struct { uint32_t magic, sum; uint8_t prg; char path[BR_PATH]; } keep_t;
+static keep_t keep __attribute__((section(".uninitialized_data.keep")));
+static uint32_t keep_sum(const keep_t *k)
+{
+    uint32_t h = 2166136261u ^ k->prg;
+    for (int i = 0; i < BR_PATH; i++) h = (h ^ (uint8_t)k->path[i]) * 16777619u;
+    return h;
+}
+static void reboot_now(int card)
+{
+    for (int i = 0; i < 100 && !reboot_parked; i++) sleep_ms(1);   /* core 1 off the bus, not running the drive */
+    if (card && B.online && !B.virtual_disk && B.sw == SW_NONE) {
+        int any = 0; for (int t = 0; t < 42; t++) any |= bus_dirty[t];
+        if (any) svc_flush(B.mounted, &bus_disk, bus_dirty);   /* what the drive wrote, to the card first */
+    }
+    memset(&keep, 0, sizeof keep);
+    if (B.online && B.knob_disk) {
+        if (B.sw != SW_NONE) strncpy(keep.path, B.swap_path, BR_PATH - 1);          /* mid-swap: the new disk */
+        else if (B.mounted[0]) strncpy(keep.path, B.mounted, BR_PATH - 1);
+        else if (B.prg[0] && strlen(B.last_dir) + strlen(B.prg) + 2 <= BR_PATH) {   /* a program: its folder, it first */
+            strcpy(keep.path, B.last_dir);
+            if (strcmp(keep.path, "/")) strcat(keep.path, "/");
+            strcat(keep.path, B.prg); keep.prg = 1;
+        }
+        if (keep.path[0]) { keep.sum = keep_sum(&keep); keep.magic = KEEP_MAGIC; }
+    }
+    watchdog_reboot(0, 0, 0);
+    for (;;) { }
+}
+/* after the restart: the knob's disk back in */
+static void keep_restore(void)
+{
+    keep_t k = keep;
+    keep.magic = 0;
+    if (k.magic != KEEP_MAGIC || k.sum != keep_sum(&k)) return;
+    k.path[BR_PATH - 1] = 0;
+    if (k.prg) ui_mount_prg(k.path); else ui_mount(k.path);
+}
+
 int main(void)
 {
     set_sys_clock_khz(SYS_MHZ * 1000, true);
@@ -793,8 +1129,10 @@ int main(void)
     }
 
     /* the card and the ROM: wait for both */
+    int upd_done = 0;
     for (;;) {
         io.card = sd_present() && st_init();
+        if (io.card && !upd_done) { upd_done = 1; update_check(&ui); }   /* before the ROM: an update needs none */
         if (io.card && st_read("/dos1541.bin", dos_rom, sizeof dos_rom) == (long)sizeof dos_rom) break;
         strcpy(ui.msg, io.card ? "Need /dos1541.bin" : "Insert SD card"); ui.msg_until = sd_ms() + 1000000;
         ui_draw(&ui, sd_ms()); oled_show(&ui);
@@ -811,13 +1149,16 @@ int main(void)
     late_pcp = &CPU.pc;
     multicore_launch_core1(core1_main);
     while (!core1_up) serve();                       /* (the boot needs no card) */
-    printf("PicoD64: ready\n");
+    ready_ms = sd_ms();
+    printf("PicoD64: ready after %lu ms\n", (unsigned long)ready_ms);
+    keep_restore();
 
     snd_start();
     uint32_t last_draw = 0, motor_off_since = 0;
     int card_prev = 1; uint32_t card_at = 0;
     for (;;) {
         serve();
+        if (reboot_req) reboot_now(io.card);
         if (cap_on) cap_drain();
         if (la_armed && !cap_on && B.online && CPU.pc >= la_lo && CPU.pc <= la_hi && (!la_atn || (pins_in() & IEC_ATN)))
             la_capture();                            /* (la_atn, serial Y: only with ATN asserted, 2026-11-10) */
@@ -900,20 +1241,42 @@ int main(void)
         }
         if (ch == 'L') { la_armed = 1; la_n = 0; printf("logic analyser armed: drive code $%04X-$%04X\n", la_lo, la_hi); }
         if (ch == 'l') la_print();
-        if (ch == 'A') lat_watch();
+        if (ch == 'A') lat_watch(0);
+        if (ch == 'a') lat_watch(1);
+        if (ch == 'e') edge_watch();
+        if (ch == 'f') pulse_test();
+        if (ch == 'O') line_timing();                /* with fw/linetime/linetime.prg running on the C64 */
         if (ch == 'w') printf("w %lu\n", (unsigned long)pin_writes);   /* the timed-write count alone: a cheap 'still loading?' (2026-11-14) */
         if (ch == 'U') { bl_on = bl_on ? 0 : 2; bl_n = 0; bl_last = 0; la_n = 0; printf("block log (decoded sectors at $0700) %s: drive code $%04X-$%04X\n", bl_on ? "on" : "off", la_lo, la_hi); }
         if (ch == 'V') { bl_on = !bl_on; bl_n = 0; bl_last = 0; la_n = 0; printf("block log %s: drive code $%04X-$%04X\n", bl_on ? "on" : "off", la_lo, la_hi); }
         if (ch == 'v') { uint32_t n = bl_n < LA_N ? bl_n : LA_N; printf("block log: %lu blocks, the last %lu (half-track hash):\n", (unsigned long)bl_n, (unsigned long)n);
                          for (uint32_t i = bl_n - n; i != bl_n; i++) printf("B %u %08lX\n", la_p[i & (LA_N - 1)], (unsigned long)la_t[i & (LA_N - 1)]); }
         if (ch == 'G') {                             /* G: the last 400 bus changes the drive saw, oldest first (after a hang: its last frames) */
+#if TRACE
+            uint32_t w = log_w, n = w < LOG_N - 16 ? w : LOG_N - 16, c0 = log_buf[(w - n) & (LOG_N - 1)] >> 3;   /* (16: room for changes meanwhile) */
+#else
             uint32_t w = log_w, n = w < 400 ? w : 400, c0 = log_buf[(w - n) & (LOG_N - 1)] >> 3;
+#endif
             printf("bus ring: drive cycle (from the first shown), lines pulled ATN CLK DATA; now cycle %lu\n", (unsigned long)(D.cycles & 0x1FFFFFFFu));
             for (uint32_t i = w - n; i != w; i++) {
                 uint32_t v = log_buf[i & (LOG_N - 1)];
+#if TRACE
+                printf("%lu %u%u%u g%u\n", (unsigned long)(((v >> 3) - c0) & 0x1FFFFFFFu), v & 1, (v >> 1) & 1, (v >> 2) & 1, tr_gate[i & (LOG_N - 1)]);
+#else
                 printf("%lu %u%u%u\n", (unsigned long)(((v >> 3) - c0) & 0x1FFFFFFFu), v & 1, (v >> 1) & 1, (v >> 2) & 1);
+#endif
             }
         }
+#if TRACE
+        if (ch == 'D') {                             /* D: the drive now (after a hang): CPU, ATN gate, VIA1, and its RAM $0000-$07FF */
+            printf("drive: PC $%04X A %02X X %02X Y %02X S %02X P %02X%s; cycle %lu; half-track %u; gate %u out %u in %u\n", CPU.pc, CPU.a, CPU.x, CPU.y, CPU.s, CPU.p,
+                   CPU.jammed ? " JAMMED" : "", (unsigned long)D.cycles, D.ht, D.gate, D.iec_out, D.iec_in);
+            printf("VIA1: ORB %02X DDRB %02X PB in %02X ORA %02X DDRA %02X ACR %02X PCR %02X IFR %02X IER %02X; VIA2: ORB %02X PCR %02X IFR %02X IER %02X\n",
+                   D.via1.orb, D.via1.ddrb, D.via1.pb_in, D.via1.ora, D.via1.ddra, D.via1.acr, D.via1.pcr, D.via1.ifr, D.via1.ier,
+                   D.via2.orb, D.via2.pcr, D.via2.ifr, D.via2.ier);
+            for (int a = 0; a < 0x800; a += 32) { printf("R %04X", a); for (int i = 0; i < 32; i++) printf(" %02X", D.ram[a + i]); printf("\n"); }
+        }
+#endif
 #if COST && !DIAG
         if (ch == 'u') { static const char *nm[6] = { "VIA1 write, its work", "VIA1 read, after its wait", "VIA2 read, all of it", "events (BUS_TICK)", "disk catch-ups", "  head events in them" };
                          for (int k = 0; k < 6; k++) printf("%-26s n %10lu  avg %4lu  max %6lu sysclk\n", nm[k], (unsigned long)cs_n[k], (unsigned long)(cs_n[k] ? cs_sum[k] / cs_n[k] : 0), (unsigned long)cs_max[k]);
@@ -963,8 +1326,10 @@ int main(void)
         if (ch == ']' || ch == '[') { rd_trim += ch == ']' ? SYS_MHZ / 10 : -(SYS_MHZ / 10); printf("bus reads %ld sysclk after their cycle\n", (long)rd_trim); }
         if (ch == '}' || ch == '{') { rel_lead += ch == '}' ? SYS_MHZ / 20 : -(SYS_MHZ / 20); if (rel_lead < 0) rel_lead = 0; printf("bus releases %ld sysclk before pulls\n", (long)rel_lead); }
         if (ch == '>' || ch == '<') { wr_trim += ch == '>' ? SYS_MHZ / 10 : -(SYS_MHZ / 10); wr_lat_max = INT32_MIN; wr_lat_min = INT32_MAX; printf("bus write pins %ld sysclk after their cycle\n", (long)wr_trim); }
+        if (ch == '+' || ch == '-') { wr_trim += ch == '+' ? 5 : -5; wr_lat_max = INT32_MIN; wr_lat_min = INT32_MAX; printf("bus write pins %ld sysclk after their cycle\n", (long)wr_trim); }   /* fine steps, 5 sysclk (2026-11-20: The Masque at +0.0 vs The Hat at +0.3) */
         if (ch == 'T') { snd_test = SND_HZ; printf("test tone: 1 s, 3.9 kHz, full swing\n"); }   /* the piezo's loudest: the hardware's ceiling */
         if (ch == 's') {
+            printf("ready %lu ms after power-on or reset\n", (unsigned long)ready_ms);
             printf("stack used: core 0 %u of %u, core 1 %u of %u\n", sm_used(__StackBottom, __StackTop), (unsigned)(__StackTop - __StackBottom) * 4u,
                    sm_used(__StackOneBottom, __StackOneTop), (unsigned)(__StackOneTop - __StackOneBottom) * 4u);
             printf("online %d mounted \"%s\" mounts %lu unmounts %lu swaps %lu resets %lu replays %lu/%lu late %lu\n",

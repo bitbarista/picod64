@@ -75,6 +75,46 @@ int main(int argc, char **argv)
         puts(bad ? "FAIL" : "PASS");
         return bad != 0;
     }
+    if (!strcmp(cmd, "err") && argc > 4) {             /* err <img> <sdpath> <ref.d64>: a D64 with error bytes [S21] */
+        static uint8_t f0[D64_SECTORS * 257], g[D64_GCR_BYTES], want[8000], sec[21 * 256];
+        static disk_t dk; static syncs_t fr[D64_TRACKS];
+        uint8_t *e = f0 + D64_BYTES;
+        FILE *f = fopen(argv[4], "rb"); if (!f || fread(f0, 1, D64_BYTES, f) != D64_BYTES) return 2; fclose(f);
+        uint8_t id1 = f0[d64_offset(18, 0) + 162], id2 = f0[d64_offset(18, 0) + 163];
+        memset(e, D64_ERR_OK, D64_SECTORS);
+        #define E(t, s) e[d64_offset(t, s) / 256]
+        E(1, 3) = 0x02; E(1, 5) = 0x04; E(1, 7) = 0x05; E(2, 9) = 0x09; E(2, 11) = 0x0B; E(20, 4) = 0x05;
+        for (int s = 0; s < d64_sectors(3); s++) E(3, s) = 0x03;
+        for (int s = 0; s < d64_sectors(34); s++) E(34, s) = 0x0B;
+        int bad = 0;
+        if (!st_write(p, f0, sizeof f0) || !st_load_d64(p, g, &dk, fr, sec)) { puts("FAIL load"); return 1; }
+        for (int t = 1; t <= D64_TRACKS; t++) {           /* mounted as d64_track_sectors_err builds it */
+            d64_track_sectors_err(f0 + d64_offset(t, 0), t, id1, id2, &E(t, 0), want);
+            if (memcmp(dk.gcr[2 * (t - 1)], want, (size_t)d64_track_bytes(t))) { printf("FAIL track %d not as built\n", t); bad++; }
+        }
+        for (int t = 1; t <= D64_TRACKS; t++) st_write_track(p, &dk, t, sec);   /* unchanged: the file must not change */
+        if (st_read(p, big, sizeof big) != (long)sizeof f0 || memcmp(big, f0, sizeof f0)) { puts("FAIL write back changed the file"); bad++; }
+        /* the drive rewrites track 1 S7 (was $05) and track 34 S0 (built with a wrong ID, it keeps it): only S7 clears */
+        uint8_t e1[21]; memcpy(e1, &E(1, 0), 21); e1[7] = D64_ERR_OK;
+        d64_track_sectors_err(f0 + d64_offset(1, 0), 1, id1, id2, e1, (uint8_t *)dk.gcr[0]);
+        st_write_track(p, &dk, 1, sec); st_write_track(p, &dk, 34, sec);
+        E(1, 7) = D64_ERR_OK;
+        if (st_read(p, big, sizeof big) != (long)sizeof f0 || memcmp(big, f0, sizeof f0)) { puts("FAIL after a rewrite: error bytes not as expected"); bad++; }
+        if (!st_load_d64(p, g, &dk, fr, sec)) bad++;      /* mounted again: S7 builds clean */
+        d64_track_sectors_err(f0 + d64_offset(1, 0), 1, id1, id2, &E(1, 0), want);
+        if (memcmp(dk.gcr[0], want, (size_t)d64_track_bytes(1))) { puts("FAIL remount"); bad++; }
+        /* a table of all $01, and a plain D64: built as before */
+        memset(e, D64_ERR_OK, D64_SECTORS);
+        for (int pass = 0; pass < 2; pass++) {
+            if (!st_write(p, f0, pass ? D64_BYTES : (long)sizeof f0) || !st_load_d64(p, g, &dk, fr, sec)) bad++;
+            for (int t = 1; t <= D64_TRACKS; t++) {
+                d64_track_sectors(f0 + d64_offset(t, 0), t, id1, id2, want);
+                if (memcmp(dk.gcr[2 * (t - 1)], want, (size_t)d64_track_bytes(t))) { printf("FAIL %s: track %d\n", pass ? "plain" : "all OK", t); bad++; break; }
+            }
+        }
+        puts(bad ? "FAIL" : "PASS");
+        return bad != 0;
+    }
     if (!strcmp(cmd, "ls")) {
         fsent_t e;
         for (int i = 0; st_list(p, i, &e); i++) printf("%s %s %u\n", e.dir ? "DIR" : "   ", e.name, e.size);

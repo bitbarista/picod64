@@ -177,6 +177,15 @@ static void step(void)
         if (every && ++k % every == 0) { printf("    [pc: c64 $%04X t %.3f s | drive $%04X cyc %u]\n", c64_pc(), c64_cycles() / (double)C64_HZ, CPU.pc, D.cycles); fflush(stdout); }
     }
     if (getenv("FWVIA1") && !via1_log && B.online && CPU.pc >= 0x0335 && CPU.pc <= 0x0350) via1_log = 1;
+    if (B.online && getenv("FWJOBS")) {               /* FWJOBS=1: each DOS job's result other than OK ($01), with its track and sector */
+        static uint8_t was[6];
+        for (int j = 0; j < 6; j++) {
+            uint8_t v = D.ram[j];
+            if ((was[j] & 0x80) && !(v & 0x80) && v != 1)
+                printf("  [job %02X on T%d S%d: %02X]\n", was[j], D.ram[6 + 2 * j], D.ram[7 + 2 * j], v);
+            was[j] = v;
+        }
+    }
     if (B.online) {
         bus_poll();                                   /* runs ~1000 drive cycles; card work as needed */
         c64_run_to(D.cycles);                         /* the C64 keeps time even when the drive's code never touches the bus (a demo's loader, 2026-11-06) */

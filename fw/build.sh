@@ -12,7 +12,7 @@ export PICO_TINYUSB_PATH=${PICO_TINYUSB_PATH:-$HOME/tools/tinyusb-sdk2.2.0}
 PT=${picotool_DIR:-$HOME/tools/picotool}
 [ -f "$PT/picotoolConfig.cmake" ] && PTARG="-Dpicotool_DIR=$PT" || PTARG=""
 mkdir -p build
-cmake -S . -B build -G Ninja $PTARG -DSYS_MHZ=${SYS_MHZ:-150} -DDIAG=${DIAG:-0} -DEAGER=${EAGER:-0} -DOPT=${OPT:-2} > build/cmake.log 2>&1 || { cat build/cmake.log; exit 1; }
+cmake -S . -B build -G Ninja $PTARG -DSYS_MHZ=${SYS_MHZ:-150} -DDIAG=${DIAG:-0} -DTRACE=${TRACE:-0} -DEAGER=${EAGER:-0} -DOPT=${OPT:-2} > build/cmake.log 2>&1 || { cat build/cmake.log; exit 1; }
 grep -A3 -i "warning" build/cmake.log || true
 ninja -C build
 arm-none-eabi-nm build/picod64.elf | grep -q " tud_task_ext" || { echo "  *** USB stdio missing"; exit 1; }

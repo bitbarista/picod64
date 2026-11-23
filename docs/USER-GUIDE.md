@@ -7,6 +7,7 @@ whichever suits: they work together, and anything one puts in the drive, the oth
 - [The knob and OLED](#the-knob-and-oled): insert, swap and eject disks without touching the C64.
 - [Multi-disk games and demos](#multi-disk-games-and-demos): one long press for the next disk.
 - [Without either](#without-either-plain-basic): plain BASIC commands still work.
+- [Updating the firmware](#updating-the-firmware): from the card.
 
 ## The browser
 
@@ -56,8 +57,9 @@ drew it. RETURN on a program runs it.
 
 **Good to know**
 
-- **The turbo** loads programs about 27 times faster than a normal 1541, with nothing extra on the C64. If anything
-  goes wrong it quietly falls back to a normal load. For an awkward title, F1 **Run slow**, or F3 to turn it off.
+- **The turbo** loads programs (PRG files on the card) about 27 times faster than a normal 1541, with nothing extra
+  on the C64. Programs inside a D64 always load the normal 1541 way, through the drive. If anything goes wrong
+  it quietly falls back to a normal load. For an awkward title, F1 **Run slow**, or F3 to turn it off.
 - **It remembers** the folder, your place in it and the turbo setting, even after the C64 is switched off.
 - **Big folders** are fine: up to 2,048 entries are listed, and the filter finds any of them.
 - **A fast-load cartridge** can stay fitted.
@@ -142,3 +144,18 @@ the card itself:
 
 With a disk in, everything goes to the disk, as on a 1541: `LOAD"*",8,1`, `SAVE`, and fast loaders. Saves and
 formats are written back to the D64 on the card.
+
+## Updating the firmware
+
+Copy the new `picod64.uf2` to the card's top folder and switch PicoD64 on.
+
+| The OLED says | What it means |
+|---|---|
+| *Updating, wait*, then *Updated* | Installed. The file is renamed `picod64.uf2.done`, so it won't install again |
+| *Up to date* | That firmware is already installed. Renamed too |
+| *Update failed*, then why | The file isn't a whole PicoD64 firmware (*Cut short*, *Not PicoD64*...). Nothing was changed; copy it again |
+
+The update takes a few seconds. **Don't switch off while it says *Updating*.** If the power does go, PicoD64
+won't start: flash `picod64.uf2` the first way, holding BOOTSEL (the pinhole marked ⤓) while plugging in USB.
+
+The device number and your settings are kept.

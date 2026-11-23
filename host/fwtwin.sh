@@ -49,6 +49,14 @@ mkimg "$W/card.img" fat
 cp "$W/card.img" "$W/sdcard.img"        # (before the storage test rewrites rand.d64 on card.img)
 "$W/st" d64 "$W/card.img" /rand.d64 "$W/rand.d64" > "$W/st.log" || true
 check "card: D64 streamed to GCR = d64_to_disk; tracks written back exactly" "grep -q PASS '$W/st.log'"
+"$W/st" err "$W/card.img" /err.d64 "$W/rand.d64" > "$W/err.log" || true
+check "card: D64 error bytes built into the GCR; a rewritten bad sector clears its byte; no table = as before" "grep -q PASS '$W/err.log'"
+gcc -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -o "$W/up" fw_update_test.c ../fw/update.c $F
+truncate -s 64M "$W/up.img"; /usr/sbin/mkfs.vfat -F 32 "$W/up.img" >/dev/null
+UF2=${UF2:-../fw/build/picod64.uf2}
+if [ -f "$UF2" ]; then "$W/up" "$W/up.img" "$UF2" > "$W/up.log" || true
+  check "update from the card: the same firmware renamed .done, a new one staged, 8 kinds of bad file refused untouched, the build's UF2 taken" "grep -q PASS '$W/up.log'"
+else echo "(update from the card: skipped, no $UF2: bash fw/build.sh)"; fi
 "$W/ds" > "$W/ds.log" || true
 gcc -O2 -Wall -Wextra -o "$W/sk" fw_stack_test.c
 check "stack high-water mark" "'$W/sk' | grep -q PASS"
@@ -216,11 +224,14 @@ br b8 "type:g$STOP" wait:1
 check "browser: RUN/STOP clears the filter" "grep -q 'Type to filter' '$W/b8.log' && grep -q '1 of 3' '$W/b8.log'"
 br b9 "type:${F3}hello$F1~|" wait:6
 check "browser: the menu's LOAD with the turbo off: loads, doesn't run" "grep -q 'SEARCHING FOR #' '$W/b9.log' && ! grep -q 'HELLO FROM' '$W/b9.log'"
-br b11 "type:demo$F1~|" wait:12
+br b11 "type:demo$F1~|" wait:12 peek:12 peek:13
 check "browser: the menu's RUN FIRST" "grep -q 'B2 FROM THE D64' '$W/b11.log'"
+check "browser: after RUN FIRST the drive has read the disk, as after a LOAD: its ID DD at \$12/\$13 (it loaded the file itself; sent from the image, a loader's DOS job got 29: Shards of Fancy, 2026-11-17)" "grep -q '\$0012 = \$44' '$W/b11.log' && grep -q '\$0013 = \$44' '$W/b11.log'"
+br b14 'type:demo|' wait:6 'type:|' wait:8 peek:12 peek:13
+check "browser: RETURN on a file in an opened D64 runs it, and the drive has read the disk" "grep -q 'B2 FROM THE D64' '$W/b14.log' && grep -q '\$0012 = \$44' '$W/b14.log' && grep -q '\$0013 = \$44' '$W/b14.log'"
 br rfr "type:demo$F1~|" wait:12 reset: 'type:load"*",8|' wait:3 'type:run|' wait:5
 check "browser: a reset takes out the disk RUN FIRST put in, LOAD\"*\" is the browser again (2026-11-07)" "grep -q 'PicoD64  ' '$W/rfr.log' && grep -q 'online 0' '$W/rfr.log'"
-check "browser: RUN FIRST comes over the turbo, not a typed LOAD (on the board it raced, 2026-11-07)" "! grep -q 'SEARCHING' '$W/b11.log' && grep -q 'turbos [1-9]' '$W/b11.log' && grep -q 'mounted \"/demo.d64\"' '$W/b11.log'"
+check "browser: RUN FIRST loads the plain way, through the drive, with the disk in (no turbo from a D64 since 2026-11-17)" "grep -q 'SEARCHING' '$W/b11.log' && grep -q 'mounted \"/demo.d64\"' '$W/b11.log'"
 br b12 "type:demo$F1~~|" wait:6
 check "browser: the menu's INSERT mounts, to BASIC" "grep -q 'mounted \"/demo.d64\"' '$W/b12.log' && ! grep -q 'Type to filter' '$W/b12.log'"
 br b13 'type:demo|' wait:6 'type:<' wait:4
@@ -284,9 +295,9 @@ tb t6i 'type:hello' "type:$F1~|" wait:6 c64mem:a2:1 wait:0.5 c64mem:a2:1
 [ "$(grep 'C64 \$00A2' "$W/t6i.log" | sort -u | wc -l)" = 2 ]
 IRC=$?; check "turbo: after a turbo LOAD left at READY, the clock runs (the keyboard works)" "[ $IRC = 0 ]"
 tb t7 'type:demo|' wait:6 'type:|' wait:8
-check "turbo: a file in a mounted D64: from the image, the disk back in the drive" "grep -q 'B2 FROM THE D64' '$W/t7.log' && grep -q 'mounted \"/demo.d64\"' '$W/t7.log' && grep -q 'mounts 2' '$W/t7.log'"
-tb t8 'type:fat|' wait:6 'type:~|' wait:8
-check "turbo: a 25 KB file in a D64" "grep -q 'BIG ONE LOADED OK' '$W/t8.log'"
+check "a file in a mounted D64: loaded the plain way, the disk back in the drive" "grep -q 'B2 FROM THE D64' '$W/t7.log' && grep -q 'mounted \"/demo.d64\"' '$W/t7.log' && grep -q 'mounts 2' '$W/t7.log'"
+tb t8 'type:fat|' wait:6 'type:~|' wait:80
+check "a 25 KB file in a D64, the plain way (no turbo from a D64 since 2026-11-17)" "grep -q 'BIG ONE LOADED OK' '$W/t8.log'"
 tb t9 wait:1
 check "formats: the same name in three formats, told apart" "grep -q 'Game .* CRT' '$W/t9.log' && grep -q 'Game .* D64' '$W/t9.log' && grep -q 'Game .* T64' '$W/t9.log'"
 tb t10 'type:v1.2|' wait:6
@@ -305,9 +316,9 @@ check "settings: back on the program last run, after a restart" "grep -q ' of ' 
 # lost the space to the command trim, went the plain way and its place wasn't saved
 cp --sparse=always "$W/bd.d64" "$W/spc.d64"; c1541 "$W/spc.d64" -write "$W/bh.prg" "zz " >/dev/null 2>&1
 cp --sparse=always "$W/tbk.img" "$W/sp.img"; "$W/st" mkdir "$W/sp.img" /Sp; "$W/st" put "$W/sp.img" /Sp/spc.d64 "$W/spc.d64"
-"$W/fwtwin" "$DOS" "$K" "$B" "$W/sp.img" "$W/out" 'type:load"*",8|' wait:3 'type:run|' wait:4 'type:sp|' wait:2 'type:spc|' wait:8 'type:zz|' wait:8 screen: state: > "$W/sp.log" 2>&1 || true
+"$W/fwtwin" "$DOS" "$K" "$B" "$W/sp.img" "$W/out" 'type:load"*",8|' wait:3 'type:run|' wait:4 'type:sp|' wait:2 'type:spc|' wait:8 'type:zz|' wait:12 screen: state: > "$W/sp.log" 2>&1 || true
 "$W/st" get "$W/sp.img" /.picod64.cfg "$W/sp.cfg" >/dev/null 2>&1 || true
-check "turbo: a name ending in a space, in a D64: by the turbo, and its place saved" "grep -q 'HELLO FROM' '$W/sp.log' && ! grep -q 'SEARCHING' '$W/sp.log' && grep -q '^/Sp' '$W/sp.cfg'"
+check "a name ending in a space, in a D64: the plain LOAD finds it, and its place saved" "grep -q 'HELLO FROM' '$W/sp.log' && grep -q 'SEARCHING' '$W/sp.log' && grep -q '^/Sp' '$W/sp.cfg'"
 
 # The place saved as a disk goes in, not only when the turbo loads (2026-11-14: a load with the turbo off, refused or by
 # the knob left the browser in the folder before)
